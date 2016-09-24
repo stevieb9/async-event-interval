@@ -5,7 +5,8 @@ use Async::Event::Interval;
 use IPC::Shareable qw(:lock);
 use Test::More;
 
-unless ( $ENV{RELEASE_TESTING} ) {
+unless ( $ENV{DEV_TESTING} ) {
+    print "dev test only!\n";
     plan( skip_all => "This is an author test" );
 }
 
