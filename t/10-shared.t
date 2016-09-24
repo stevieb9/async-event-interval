@@ -2,13 +2,14 @@ use strict;
 use warnings;
 
 use Async::Event::Interval;
-use IPC::Shareable qw(:lock);
 use Test::More;
 
-unless ( $ENV{DEV_TESTING} ) {
-    print "dev test only!\n";
+unless ( $ENV{RELEASE_TESTING} ) {
     plan( skip_all => "This is an author test" );
 }
+
+require IPC::Shareable;
+import IPC::Shareable;
 
 my $mod = 'Async::Event::Interval';
 
