@@ -19,7 +19,7 @@ SYNOPSIS
             print "$_: in main loop\n";
     
             $event->stop if $_ == 3;
-            $event->restart if $_ == 7;
+            $event->start if $_ == 7;
     
             sleep 1;
         }
@@ -72,7 +72,7 @@ METHODS
 
  restart
 
-    Resumes execution of a stopped event.
+    Alias for start(). Re-starts a stop()ped event.
 
 EXAMPLES
 

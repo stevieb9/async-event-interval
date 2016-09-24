@@ -21,18 +21,7 @@ sub start {
     }
     $self->_event;
 }
-sub restart {
-    my $self = shift;
-    if ($self->{stop}){
-        warn "event already running...\n";
-        return;
-    }
-    $self->_event(
-        $self->{interval},
-        $self->{cb},
-        @{ $self->{args} },
-    );
-}
+*restart = \&start;
 sub stop {
     my $self = shift;
     kill 9, $self->{pid};
@@ -98,7 +87,7 @@ an event that can share data with the main application, see L</EXAMPLES>.
         print "$_: in main loop\n";
 
         $event->stop if $_ == 3;
-        $event->restart if $_ == 7;
+        $event->start if $_ == 7;
 
         sleep 1;
     }
@@ -149,7 +138,7 @@ Stops the event from being executed.
 
 =head2 restart
 
-Resumes execution of a stopped event.
+Alias for C<start()>. Re-starts a C<stop()>ped event.
 
 =head1 EXAMPLES
 

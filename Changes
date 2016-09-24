@@ -1,5 +1,8 @@
 Revision history for Fork-Event-Interval
 
+0.03 xxx
+        - removed restart(), and aliased it instead to start()
+
 0.02    2016-09-24
         - POD fixes
 

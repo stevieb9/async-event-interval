@@ -3,7 +3,7 @@ package Async::Event::Interval;
 use warnings;
 use strict;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use Parallel::ForkManager;
 
@@ -21,18 +21,7 @@ sub start {
     }
     $self->_event;
 }
-sub restart {
-    my $self = shift;
-    if ($self->{stop}){
-        warn "event already running...\n";
-        return;
-    }
-    $self->_event(
-        $self->{interval},
-        $self->{cb},
-        @{ $self->{args} },
-    );
-}
+*restart = \&start;
 sub stop {
     my $self = shift;
     kill 9, $self->{pid};
@@ -149,7 +138,7 @@ Stops the event from being executed.
 
 =head2 restart
 
-Resumes execution of a stopped event.
+Resumes execution of a stopped event. Is simply an alias for C<start()>.
 
 =head1 EXAMPLES
 

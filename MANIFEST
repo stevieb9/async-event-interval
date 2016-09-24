@@ -8,6 +8,7 @@ t/00-load.t
 t/05-base.t
 t/10-shared.t
 t/15-interval.t
+t/20-restart.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t
