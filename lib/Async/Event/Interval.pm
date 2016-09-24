@@ -5,7 +5,6 @@ use strict;
 
 our $VERSION = '0.01';
 
-use Config;
 use Parallel::ForkManager;
 
 my $continue = 1;
@@ -17,6 +16,7 @@ $SIG{INT} = sub {
 sub new {
     my $self = bless {}, shift;
     $self->{pm} = Parallel::ForkManager->new(1);
+    $self->event(@_);
     return $self;
 }
 sub event {
@@ -38,7 +38,6 @@ sub event {
 }
 sub restart {
     my $self = shift;
-
     $self->event(
         $self->{interval},
         $self->{cb},
@@ -46,8 +45,7 @@ sub restart {
     );
 }
 sub stop {
-    my $self = shift;
-    kill 9 => $self->{pid};
+    kill 9 => $_[0]->{pid};
 }
 sub _pid {
     my ($self, $pid) = @_;
@@ -56,14 +54,12 @@ sub _pid {
 }
 sub _set {
     my ($self, $interval, $cb, @args) = @_;
-
     $self->{interval} = $interval;
     $self->{cb} = $cb;
     $self->{args} = \@args;
 }
 sub DESTROY {
-    my $self = shift;
-    $self->stop;
+    $_[0]->stop;
 }
 1;
 

@@ -6,6 +6,7 @@ use strict;
 our $VERSION = '0.01';
 
 use Config;
+use Data::Dumper;
 use Parallel::ForkManager;
 
 my $continue = 1;
@@ -15,8 +16,9 @@ $SIG{INT} = sub {
 };
 
 sub new {
-    my $self = bless {}, shift;
-    $self->{pm} = Parallel::ForkManager->new(1);
+    my $self = bless { }, shift;
+    $self->{pm} = Parallel::ForkManager->new( 1 );
+    $self->event(@_);
     return $self;
 }
 sub event {
@@ -30,8 +32,15 @@ sub event {
            last;
         }
         while($continue){
-            $self->{cb}->(@{ $self->{args} });
-            sleep $self->{interval};
+            if (ref $self->{condition} eq 'CODE'){
+                if ($self->{condition}->()){
+                    $self->{cb}->(@{ $self->{args} });
+                }
+            }
+            else {
+                $self->{cb}->(@{ $self->{args} });
+                sleep $self->{condition};
+            }
         }
         $self->{pm}->finish;
     }
@@ -40,7 +49,7 @@ sub restart {
     my $self = shift;
 
     $self->event(
-        $self->{interval},
+        $self->{condition},
         $self->{cb},
         @{ $self->{args} },
     );
@@ -55,9 +64,8 @@ sub _pid {
     return $self->{pid} || undef;
 }
 sub _set {
-    my ($self, $interval, $cb, @args) = @_;
-
-    $self->{interval} = $interval;
+    my ($self, $condition, $cb, @args) = @_;
+    $self->{condition} = $condition;
     $self->{cb} = $cb;
     $self->{args} = \@args;
 }
