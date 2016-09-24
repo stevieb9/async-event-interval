@@ -1,5 +1,5 @@
 ---
-abstract: 'The great new Async::Event::Interval!'
+abstract: 'Extremely simple timed asynchronous events'
 author:
   - 'Steve Bertrand <steveb@cpan.org>'
 build_requires:

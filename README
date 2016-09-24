@@ -1,55 +1,116 @@
-Fork-Event-Interval
+NAME
 
-The README is used to introduce the module and provide instructions on
-how to install the module, any machine dependencies it may have (for
-example C compilers and installed libraries) and any other information
-that should be provided before the module is installed.
+    Async::Event::Interval - Extremely simple timed asynchronous events
 
-A README file is required for CPAN modules since CPAN extracts the README
-file from a module distribution so that people browsing the archive
-can use it to get an idea of the module's uses. It is usually a good idea
-to provide version information here so that people can decide whether
-fixes for the module are worth downloading.
+    <a href="http://travis-ci.org/stevieb9/async-event-interval"><img
+    src="https://secure.travis-ci.org/stevieb9/async-event-interval.png"/></a>
+    <a
+    href="https://ci.appveyor.com/project/stevieb9/async-event-interval"><img
+    src="https://ci.appveyor.com/api/projects/status/br01o72b3if3plsw/branch/master?svg=true"/></a>
+    <a
+    href='https://coveralls.io/github/stevieb9/async-event-interval?branch=master'><img
+    src='https://coveralls.io/repos/stevieb9/async-event-interval/badge.svg?branch=master&service=github'
+    alt='Coverage Status' /></a>
 
+SYNOPSIS
 
-INSTALLATION
+    A simple event. Multiple events can be simultaneously used. For an
+    example using an event that can share data with the main application,
+    see EXAMPLES.
 
-To install this module, run the following commands:
+        use Async::Event::Interval;
+    
+        my $event
+            = Async::Event::Interval->new(1.5, \&callback);
+    
+        $event->start;
+    
+        for (1..10){
+            print "$_: in main loop\n";
+    
+            $event->stop if $_ == 3;
+            $event->restart if $_ == 7;
+    
+            sleep 1;
+        }
+    
+        sub callback {
+            print "timed event callback\n";
+        }
 
-	perl Makefile.PL
-	make
-	make test
-	make install
+DESCRIPTION
 
-SUPPORT AND DOCUMENTATION
+    Very basic implementation of asynchronous events that are triggered by
+    a timed interval.
 
-After installing, you can find documentation for this module with the
-perldoc command.
+    Variables are not shared between the main application and the event. To
+    do that, you'll need to use some form of memory sharing, such as
+    IPC::Shareable. See EXAMPLES for an example.
 
-    perldoc Fork::Event::Interval
+    Each event is simply a separate forked process, which runs in a while
+    loop.
 
-You can also look for information at:
+METHODS
 
-    RT, CPAN's request tracker (report bugs here)
-        http://rt.cpan.org/NoAuth/Bugs.html?Dist=Fork-Event-Interval
+ new($delay, $callback)
 
-    AnnoCPAN, Annotated CPAN documentation
-        http://annocpan.org/dist/Fork-Event-Interval
+    Returns a new Async::Event::Interval object. Does not create the event.
+    Use start for that.
 
-    CPAN Ratings
-        http://cpanratings.perl.org/d/Fork-Event-Interval
+    Parameters:
 
-    Search CPAN
-        http://search.cpan.org/dist/Fork-Event-Interval/
+        $delay
 
+    Mandatory: The interval on which to trigger your event callback, in
+    seconds. Represent partial seconds as a floating point number.
+
+        $callback
+
+    Mandatory: A reference to a subroutine that will be called every time
+    the interval expires.
+
+ start
+
+    Starts the event timer. Each time the interval is reached, the event
+    callback is executed.
+
+ stop
+
+    Stops the event from being executed.
+
+ restart
+
+    Resumes execution of a stopped event.
+
+EXAMPLES
+
+    A timed event where the event callback shares a hash reference with the
+    main program.
+
+        use Async::Event::Interval;
+        use IPC::Shareable;
+    
+        my $href = {a => 0, b => 1};
+        tie $href, 'IPC::Shareable', undef;
+    
+        my $event
+            = Async::Event::Interval->new(10, \&callback);
+    
+        sub callback {
+            $h->{a}++;
+        }
+
+AUTHOR
+
+    Steve Bertrand, <steveb at cpan.org>
 
 LICENSE AND COPYRIGHT
 
-Copyright (C) 2016 Steve Bertrand
+    Copyright 2016 Steve Bertrand.
 
-This program is free software; you can redistribute it and/or modify it
-under the terms of either: the GNU General Public License as published
-by the Free Software Foundation; or the Artistic License.
+    This program is free software; you can redistribute it and/or modify it
+    under the terms of either: the GNU General Public License as published
+    by the Free Software Foundation; or the Artistic License.
 
-See L<http://dev.perl.org/licenses/> for more information.
+    See http://dev.perl.org/licenses/ for more information.
 

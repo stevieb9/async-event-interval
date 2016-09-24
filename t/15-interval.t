@@ -13,12 +13,13 @@ my $x = 0;
 is $x, 0, "baselline var ok";
 
 my $e = $mod->new(1, \&perform, $x);
+$e->start;
 
 sleep 1;
 is data(), 10, "event is async and correct";
-sleep 2;
+sleep 1;
 $e->stop;
-is data(), 40, "event is async, and is correct again";
+is data(), 30, "event is async, and is correct again";
 
 
 sub perform {

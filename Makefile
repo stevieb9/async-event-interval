@@ -487,7 +487,7 @@ realclean purge :: realclean_subdirs
 metafile : create_distdir
 	$(NOECHO) $(ECHO) Generating META.yml
 	$(NOECHO) $(ECHO) '---' > META_new.yml
-	$(NOECHO) $(ECHO) 'abstract: '\''The great new Async::Event::Interval!'\''' >> META_new.yml
+	$(NOECHO) $(ECHO) 'abstract: '\''Extremely simple timed asynchronous events'\''' >> META_new.yml
 	$(NOECHO) $(ECHO) 'author:' >> META_new.yml
 	$(NOECHO) $(ECHO) '  - '\''Steve Bertrand <steveb@cpan.org>'\''' >> META_new.yml
 	$(NOECHO) $(ECHO) 'build_requires:' >> META_new.yml
@@ -513,7 +513,7 @@ metafile : create_distdir
 	-$(NOECHO) $(MV) META_new.yml $(DISTVNAME)/META.yml
 	$(NOECHO) $(ECHO) Generating META.json
 	$(NOECHO) $(ECHO) '{' > META_new.json
-	$(NOECHO) $(ECHO) '   "abstract" : "The great new Async::Event::Interval!",' >> META_new.json
+	$(NOECHO) $(ECHO) '   "abstract" : "Extremely simple timed asynchronous events",' >> META_new.json
 	$(NOECHO) $(ECHO) '   "author" : [' >> META_new.json
 	$(NOECHO) $(ECHO) '      "Steve Bertrand <steveb@cpan.org>"' >> META_new.json
 	$(NOECHO) $(ECHO) '   ],' >> META_new.json
@@ -863,7 +863,7 @@ testdb_static :: static pure_all
 # Creates a PPD (Perl Package Description) for a binary distribution.
 ppd :
 	$(NOECHO) $(ECHO) '<SOFTPKG NAME="Async-Event-Interval" VERSION="0.01">' > Async-Event-Interval.ppd
-	$(NOECHO) $(ECHO) '    <ABSTRACT>The great new Async::Event::Interval!</ABSTRACT>' >> Async-Event-Interval.ppd
+	$(NOECHO) $(ECHO) '    <ABSTRACT>Extremely simple timed asynchronous events</ABSTRACT>' >> Async-Event-Interval.ppd
 	$(NOECHO) $(ECHO) '    <AUTHOR>Steve Bertrand &lt;steveb@cpan.org&gt;</AUTHOR>' >> Async-Event-Interval.ppd
 	$(NOECHO) $(ECHO) '    <IMPLEMENTATION>' >> Async-Event-Interval.ppd
 	$(NOECHO) $(ECHO) '        <PERLCORE VERSION="5,006,0,0" />' >> Async-Event-Interval.ppd

@@ -11,6 +11,8 @@ my $file = 't/test.data';
 
 my $e = $mod->new(1, \&perform, 10);
 
+$e->start;
+
 is -e $file, undef, "event is asynchronious";
 
 sleep 2;

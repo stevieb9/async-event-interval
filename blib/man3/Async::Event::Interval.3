@@ -73,67 +73,98 @@
 .if n .ad l
 .nh
 .SH "NAME"
-Async::Event::Interval \- The great new Async::Event::Interval!
-.SH "VERSION"
-.IX Header "VERSION"
-Version 0.01
+Async::Event::Interval \- Extremely simple timed asynchronous events
 .SH "SYNOPSIS"
 .IX Header "SYNOPSIS"
-Quick summary of what the module does.
-.PP
-Perhaps a little code snippet.
+A simple event. Multiple events can be simultaneously used. For an example using
+an event that can share data with the main application, see \s-1EXAMPLES\s0.
 .PP
 .Vb 1
 \&    use Async::Event::Interval;
 \&
-\&    my $foo = Async::Event::Interval\->new();
-\&    ...
+\&    my $event
+\&        = Async::Event::Interval\->new(1.5, \e&callback);
+\&
+\&    $event\->start;
+\&
+\&    for (1..10){
+\&        print "$_: in main loop\en";
+\&
+\&        $event\->stop if $_ == 3;
+\&        $event\->restart if $_ == 7;
+\&
+\&        sleep 1;
+\&    }
+\&
+\&    sub callback {
+\&        print "timed event callback\en";
+\&    }
 .Ve
-.SH "EXPORT"
-.IX Header "EXPORT"
-A list of functions that can be exported.  You can delete this section
-if you don't export anything, such as for a purely object-oriented module.
-.SH "SUBROUTINES/METHODS"
-.IX Header "SUBROUTINES/METHODS"
-.SS "function1"
-.IX Subsection "function1"
-.SS "function2"
-.IX Subsection "function2"
+.SH "DESCRIPTION"
+.IX Header "DESCRIPTION"
+Very basic implementation of asynchronous events that are triggered by a timed
+interval.
+.PP
+Variables are not shared between the main application and the event. To do that,
+you'll need to use some form of memory sharing, such as IPC::Shareable. See
+\&\s-1EXAMPLES\s0 for an example.
+.PP
+Each event is simply a separate forked process, which runs in a while loop.
+.SH "METHODS"
+.IX Header "METHODS"
+.ie n .SS "new($delay, $callback)"
+.el .SS "new($delay, \f(CW$callback\fP)"
+.IX Subsection "new($delay, $callback)"
+Returns a new \f(CW\*(C`Async::Event::Interval\*(C'\fR object. Does not create the event. Use
+\&\f(CW\*(C`start\*(C'\fR for that.
+.PP
+Parameters:
+.PP
+.Vb 1
+\&    $delay
+.Ve
+.PP
+Mandatory: The interval on which to trigger your event callback, in seconds.
+Represent partial seconds as a floating point number.
+.PP
+.Vb 1
+\&    $callback
+.Ve
+.PP
+Mandatory: A reference to a subroutine that will be called every time the
+interval expires.
+.SS "start"
+.IX Subsection "start"
+Starts the event timer. Each time the interval is reached, the event callback
+is executed.
+.SS "stop"
+.IX Subsection "stop"
+Stops the event from being executed.
+.SS "restart"
+.IX Subsection "restart"
+Resumes execution of a stopped event.
+.SH "EXAMPLES"
+.IX Header "EXAMPLES"
+A timed event where the event callback shares a hash reference with the main
+program.
+.PP
+.Vb 2
+\&    use Async::Event::Interval;
+\&    use IPC::Shareable;
+\&
+\&    my $href = {a => 0, b => 1};
+\&    tie $href, \*(AqIPC::Shareable\*(Aq, undef;
+\&
+\&    my $event
+\&        = Async::Event::Interval\->new(10, \e&callback);
+\&
+\&    sub callback {
+\&        $h\->{a}++;
+\&    }
+.Ve
 .SH "AUTHOR"
 .IX Header "AUTHOR"
 Steve Bertrand, \f(CW\*(C`<steveb at cpan.org>\*(C'\fR
-.SH "BUGS"
-.IX Header "BUGS"
-Please report any bugs or feature requests to \f(CW\*(C`bug\-fork\-event\-interval at rt.cpan.org\*(C'\fR, or through
-the web interface at <http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Fork\-Event\-Interval>.  I will be notified, and then you'll
-automatically be notified of progress on your bug as I make changes.
-.SH "SUPPORT"
-.IX Header "SUPPORT"
-You can find documentation for this module with the perldoc command.
-.PP
-.Vb 1
-\&    perldoc Async::Event::Interval
-.Ve
-.PP
-You can also look for information at:
-.IP "\(bu" 4
-\&\s-1RT: CPAN\s0's request tracker (report bugs here)
-.Sp
-<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Fork\-Event\-Interval>
-.IP "\(bu" 4
-AnnoCPAN: Annotated \s-1CPAN\s0 documentation
-.Sp
-<http://annocpan.org/dist/Fork\-Event\-Interval>
-.IP "\(bu" 4
-\&\s-1CPAN\s0 Ratings
-.Sp
-<http://cpanratings.perl.org/d/Fork\-Event\-Interval>
-.IP "\(bu" 4
-Search \s-1CPAN\s0
-.Sp
-<http://search.cpan.org/dist/Fork\-Event\-Interval/>
-.SH "ACKNOWLEDGEMENTS"
-.IX Header "ACKNOWLEDGEMENTS"
 .SH "LICENSE AND COPYRIGHT"
 .IX Header "LICENSE AND COPYRIGHT"
 Copyright 2016 Steve Bertrand.
