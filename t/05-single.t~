@@ -1,0 +1,23 @@
+use strict;
+use warnings;
+
+use Fork::Event::Interval;
+use Test::More;
+
+my $mod = 'Fork::Event::Interval';
+
+my $e = $mod->new;
+my $x = 0;
+
+$e->event(1, \&perform);
+
+print "started...\n";
+sleep 2;
+
+print "stopping...\n";
+$e->stop;
+
+sub perform {
+    print "$x\n";
+    $x++;
+}
