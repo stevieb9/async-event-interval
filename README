@@ -2,21 +2,11 @@ NAME
 
     Async::Event::Interval - Extremely simple timed asynchronous events
 
-    <a href="http://travis-ci.org/stevieb9/async-event-interval"><img
-    src="https://secure.travis-ci.org/stevieb9/async-event-interval.png"/></a>
-    <a
-    href="https://ci.appveyor.com/project/stevieb9/async-event-interval"><img
-    src="https://ci.appveyor.com/api/projects/status/br01o72b3if3plsw/branch/master?svg=true"/></a>
-    <a
-    href='https://coveralls.io/github/stevieb9/async-event-interval?branch=master'><img
-    src='https://coveralls.io/repos/stevieb9/async-event-interval/badge.svg?branch=master&service=github'
-    alt='Coverage Status' /></a>
-
 SYNOPSIS
 
     A simple event. Multiple events can be simultaneously used. For an
     example using an event that can share data with the main application,
-    see EXAMPLES.
+    see "EXAMPLES".
 
         use Async::Event::Interval;
     
@@ -45,7 +35,9 @@ DESCRIPTION
 
     Variables are not shared between the main application and the event. To
     do that, you'll need to use some form of memory sharing, such as
-    IPC::Shareable. See EXAMPLES for an example.
+    IPC::Shareable. See "EXAMPLES" for an example. At this time, there is
+    no real parameter passing or ability to return values. As I said...
+    basic.
 
     Each event is simply a separate forked process, which runs in a while
     loop.

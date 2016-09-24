@@ -3,7 +3,7 @@ package Async::Event::Interval;
 use warnings;
 use strict;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use Parallel::ForkManager;
 
@@ -76,6 +76,7 @@ __END__
 
 Async::Event::Interval - Extremely simple timed asynchronous events
 
+=for html
 <a href="http://travis-ci.org/stevieb9/async-event-interval"><img src="https://secure.travis-ci.org/stevieb9/async-event-interval.png"/></a>
 <a href="https://ci.appveyor.com/project/stevieb9/async-event-interval"><img src="https://ci.appveyor.com/api/projects/status/br01o72b3if3plsw/branch/master?svg=true"/></a>
 <a href='https://coveralls.io/github/stevieb9/async-event-interval?branch=master'><img src='https://coveralls.io/repos/stevieb9/async-event-interval/badge.svg?branch=master&service=github' alt='Coverage Status' /></a>
@@ -84,7 +85,7 @@ Async::Event::Interval - Extremely simple timed asynchronous events
 =head1 SYNOPSIS
 
 A simple event. Multiple events can be simultaneously used. For an example using
-an event that can share data with the main application, see L<EXAMPLES>.
+an event that can share data with the main application, see L</EXAMPLES>.
 
     use Async::Event::Interval;
 
@@ -113,7 +114,8 @@ interval.
 
 Variables are not shared between the main application and the event. To do that,
 you'll need to use some form of memory sharing, such as L<IPC::Shareable>. See
-L<EXAMPLES> for an example.
+L</EXAMPLES> for an example. At this time, there is no real parameter passing or
+ability to return values. As I said... basic.
 
 Each event is simply a separate forked process, which runs in a while loop.
 

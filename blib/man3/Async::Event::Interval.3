@@ -74,14 +74,10 @@
 .nh
 .SH "NAME"
 Async::Event::Interval \- Extremely simple timed asynchronous events
-.PP
-<a href="http://travis\-ci.org/stevieb9/async\-event\-interval"><img src="https://secure.travis\-ci.org/stevieb9/async\-event\-interval.png"/></a>
-<a href="https://ci.appveyor.com/project/stevieb9/async\-event\-interval"><img src="https://ci.appveyor.com/api/projects/status/br01o72b3if3plsw/branch/master?svg=true"/></a>
-<a href='https://coveralls.io/github/stevieb9/async\-event\-interval?branch=master'><img src='https://coveralls.io/repos/stevieb9/async\-event\-interval/badge.svg?branch=master&service=github' alt='Coverage Status' /></a>
 .SH "SYNOPSIS"
 .IX Header "SYNOPSIS"
 A simple event. Multiple events can be simultaneously used. For an example using
-an event that can share data with the main application, see \s-1EXAMPLES\s0.
+an event that can share data with the main application, see \*(L"\s-1EXAMPLES\*(R"\s0.
 .PP
 .Vb 1
 \&    use Async::Event::Interval;
@@ -111,7 +107,8 @@ interval.
 .PP
 Variables are not shared between the main application and the event. To do that,
 you'll need to use some form of memory sharing, such as IPC::Shareable. See
-\&\s-1EXAMPLES\s0 for an example.
+\&\*(L"\s-1EXAMPLES\*(R"\s0 for an example. At this time, there is no real parameter passing or
+ability to return values. As I said... basic.
 .PP
 Each event is simply a separate forked process, which runs in a while loop.
 .SH "METHODS"
