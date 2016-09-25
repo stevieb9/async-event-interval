@@ -91,7 +91,7 @@ an event that can share data with the main application, see \*(L"\s-1EXAMPLES\*(
 \&        print "$_: in main loop\en";
 \&
 \&        $event\->stop if $_ == 3;
-\&        $event\->restart if $_ == 7;
+\&        $event\->start if $_ == 7;
 \&
 \&        sleep 1;
 \&    }
@@ -143,7 +143,7 @@ is executed.
 Stops the event from being executed.
 .SS "restart"
 .IX Subsection "restart"
-Resumes execution of a stopped event. Is simply an alias for \f(CW\*(C`start()\*(C'\fR.
+Alias for \f(CW\*(C`start()\*(C'\fR. Re-starts a \f(CW\*(C`stop()\*(C'\fRped event.
 .SH "EXAMPLES"
 .IX Header "EXAMPLES"
 A timed event where the event callback shares a hash reference with the main

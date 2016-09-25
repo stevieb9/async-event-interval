@@ -33,8 +33,9 @@ sub _event {
     for (0..1){
         my $pid = $self->{pm}->start;
         if ($pid){
-           $self->_pid($pid);
-           last;
+            $self->_pid($pid);
+            print "************** $self->{pid} **********\n";
+            last;
         }
         while(1){
             $self->{cb}->(@{ $self->{args} });
@@ -57,6 +58,7 @@ sub _set {
 sub DESTROY {
     $_[0]->stop;
 }
+sub _vim{}
 1;
 
 __END__
@@ -87,7 +89,7 @@ an event that can share data with the main application, see L</EXAMPLES>.
         print "$_: in main loop\n";
 
         $event->stop if $_ == 3;
-        $event->restart if $_ == 7;
+        $event->start if $_ == 7;
 
         sleep 1;
     }
@@ -138,7 +140,7 @@ Stops the event from being executed.
 
 =head2 restart
 
-Resumes execution of a stopped event. Is simply an alias for C<start()>.
+Alias for C<start()>. Re-starts a C<stop()>ped event.
 
 =head1 EXAMPLES
 

@@ -33,8 +33,8 @@ sub _event {
     for (0..1){
         my $pid = $self->{pm}->start;
         if ($pid){
-           $self->_pid($pid);
-           last;
+            $self->_pid($pid);
+            last;
         }
         while(1){
             $self->{cb}->(@{ $self->{args} });
@@ -57,6 +57,7 @@ sub _set {
 sub DESTROY {
     $_[0]->stop;
 }
+sub _vim{}
 1;
 
 __END__
