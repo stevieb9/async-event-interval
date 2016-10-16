@@ -2,6 +2,8 @@ Revision history for Fork-Event-Interval
 
 0.03 xxx
         - removed restart(), and aliased it instead to start()
+        - fixed issue in an already-running warn on start(), and added status()
+          to check the running status of an event (closes #1)
 
 0.02    2016-09-24
         - POD fixes

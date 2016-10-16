@@ -74,6 +74,10 @@ METHODS
 
     Alias for start(). Re-starts a stop()ped event.
 
+ status
+
+    Return 0 (false) if the event is not running, and 1 (true) if it is.
+
 EXAMPLES
 
     A timed event where the event callback shares a hash reference with the

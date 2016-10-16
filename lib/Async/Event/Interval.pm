@@ -11,21 +11,28 @@ sub new {
     my $self = bless {}, shift;
     $self->{pm} = Parallel::ForkManager->new(1);
     $self->_set(@_);
+    $self->{started} = 0;
     return $self;
 }
 sub start {
     my $self = shift;
-    if ($self->{stop}){
+    if ($self->{started}){
         warn "event already running...\n";
         return;
     }
+    $self->{started} = 1;
     $self->_event;
 }
 *restart = \&start;
 sub stop {
     my $self = shift;
     kill 9, $self->{pid};
+    $self->{started} = 0;
     $self->{stop} = 1;
+}
+sub status {
+    my $self = shift;
+    return $self->{started};
 }
 sub _event {
     my $self = shift;
@@ -140,6 +147,10 @@ Stops the event from being executed.
 =head2 restart
 
 Alias for C<start()>. Re-starts a C<stop()>ped event.
+
+=head2 status
+
+Return C<0> (false) if the event is not running, and C<1> (true) if it is.
 
 =head1 EXAMPLES
 
