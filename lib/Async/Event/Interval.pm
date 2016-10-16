@@ -97,6 +97,7 @@ an event that can share data with the main application, see L</EXAMPLES>.
         $event->stop if $_ == 3;
         $event->start if $_ == 7;
 
+        print "event is running: " . $event->status . "\n";
         sleep 1;
     }
 
