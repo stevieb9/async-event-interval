@@ -75,7 +75,6 @@ Async::Event::Interval - Extremely simple timed asynchronous events
 
 =for html
 <a href="http://travis-ci.org/stevieb9/async-event-interval"><img src="https://secure.travis-ci.org/stevieb9/async-event-interval.png"/></a>
-<a href="https://ci.appveyor.com/project/stevieb9/async-event-interval"><img src="https://ci.appveyor.com/api/projects/status/br01o72b3if3plsw/branch/master?svg=true"/></a>
 <a href='https://coveralls.io/github/stevieb9/async-event-interval?branch=master'><img src='https://coveralls.io/repos/stevieb9/async-event-interval/badge.svg?branch=master&service=github' alt='Coverage Status' /></a>
 
 
