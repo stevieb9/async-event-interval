@@ -1,5 +1,9 @@
 Revision history for Fork-Event-Interval
 
+0.04 UNREL
+        - added examples/shared.pl, shared variable between all events and
+          the parent
+
 0.03    2016-10-16
         - removed restart(), and aliased it instead to start()
         - fixed issue in an already-running warn on start(), and added status()
