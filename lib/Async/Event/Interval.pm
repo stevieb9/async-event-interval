@@ -9,6 +9,10 @@ use Carp qw(croak);
 use Parallel::ForkManager;
 
 $SIG{CHLD} = "IGNORE";
+$SIG{__WARN__} = sub {
+    my $warn = shift;
+    warn $warn if $warn !~ /^child process/;
+};
 
 sub new {
     my $self = bless {}, shift;
@@ -59,6 +63,7 @@ sub status {
             }
             else {
                 # proc must have crashed
+                $self->{started} = 0;
                 $self->_pid(0);
                 return -1;
             }
@@ -99,7 +104,7 @@ sub _set {
     $self->{args} = \@args;
 }
 sub DESTROY {
-    $_[0]->stop;
+    $_[0]->stop if $_[0]->_pid;
 }
 sub _vim{}
 1;
