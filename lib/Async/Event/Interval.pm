@@ -226,52 +226,51 @@ program.
 
 =head2 Event crash: Restart event
 
-use warnings;
-use strict;
-use feature 'say';
+    use warnings;
+    use strict;
+    use feature 'say';
 
-use Async::Event::Interval;
+    use Async::Event::Interval;
 
-my $event = Async::Event::Interval->new(
-    2,
-    sub {
-        kill 9, $$;
-    },
-);
+    my $event = Async::Event::Interval->new(
+        2,
+        sub {
+            kill 9, $$;
+        },
+    );
 
-$event->start;
+    $event->start;
 
-sleep 1; # do stuff
+    sleep 1; # do stuff
 
-if ($event->status == -1){
-    say "event crashed, restarting";
-    $event->restart;
-}
+    if ($event->status == -1){
+        say "event crashed, restarting";
+        $event->restart;
+    }
 
 =head2 Event crash: End program
 
-use warnings;
-use strict;
-use feature 'say';
+    use warnings;
+    use strict;
+    use feature 'say';
 
-use Async::Event::Interval;
+    use Async::Event::Interval;
 
-my $event = Async::Event::Interval->new(
-    2,
-    sub {
-        kill 9, $$;
-    },
-);
+    my $event = Async::Event::Interval->new(
+        2,
+        sub {
+            kill 9, $$;
+        },
+    );
 
-$event->start;
+    $event->start;
 
-sleep 1; # do stuff
+    sleep 1; # do stuff
 
-if ($event->status == -1){
-    say "event crashed, can't continue...";
-    exit;
-}
-
+    if ($event->status == -1){
+        say "event crashed, can't continue...";
+        exit;
+    }
 
 =head1 AUTHOR
 
@@ -279,7 +278,7 @@ Steve Bertrand, C<< <steveb at cpan.org> >>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2016 Steve Bertrand.
+Copyright 2017 Steve Bertrand.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
