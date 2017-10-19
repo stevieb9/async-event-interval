@@ -34,20 +34,21 @@ sub start {
 sub stop {
     my $self = shift;
 
-    kill 9, $self->_pid;
+    if ($self->_pid){
+        kill 9, $self->_pid;
 
-    $self->{started} = 0;
-    $self->{stop} = 1;
+        $self->{started} = 0;
+        $self->{stop} = 1;
 
-    # time to ensure the proc was killed
+        # time to ensure the proc was killed
 
-    sleep 1;
+        sleep 1;
 
-    if (kill 0, $self->_pid){
-        croak "Event stop was called, but the process hasn't been killed. " .
-              "This is a fatal event. Exiting...\n";
+        if (kill 0, $self->_pid){
+            croak "Event stop was called, but the process hasn't been killed. " .
+                  "This is a fatal event. Exiting...\n";
+        }
     }
-
 }
 sub status {
     my $self = shift;
@@ -64,18 +65,19 @@ sub status {
             else {
                 # proc must have crashed
                 $self->{started} = 0;
-                $self->_pid(0);
+                $self->_pid(-99);
                 return -1;
             }
         }
-        return 0;
     }
+    return -1 if defined $self->_pid && $self->_pid == -99;
+    return 0;
 }
 sub _event {
     my $self = shift;
-    my $pid;
+    
     for (0..1){
-        $pid = $self->{pm}->start;
+        my $pid = $self->{pm}->start;
         if ($pid){
             # this is the parent process
             $self->_pid($pid);
@@ -119,7 +121,6 @@ Async::Event::Interval - Extremely simple timed asynchronous events
 <a href="http://travis-ci.org/stevieb9/async-event-interval"><img src="https://secure.travis-ci.org/stevieb9/async-event-interval.png"/></a>
 <a href='https://coveralls.io/github/stevieb9/async-event-interval?branch=master'><img src='https://coveralls.io/repos/stevieb9/async-event-interval/badge.svg?branch=master&service=github' alt='Coverage Status' /></a>
 
-
 =head1 SYNOPSIS
 
 A simple event. Multiple events can be simultaneously used. For an example using
@@ -140,6 +141,11 @@ an event that can share data with the main application, see L</EXAMPLES>.
 
         if ($event->status){
             print "event is running\n";
+        }
+
+        if ($event->status == -1){
+            print "event has crashed... restarting it\n";
+            $event->restart;
         }
 
         sleep 1;
@@ -195,9 +201,12 @@ Alias for C<start()>. Re-starts a C<stop()>ped event.
 
 =head2 status
 
-Returns the event's process ID (true) if it is running, and C<0> (false) if not.
+Returns the event's process ID (true) if it is running, C<0> (false) if it
+isn't, and C<-1> if the event has crashed.
 
 =head1 EXAMPLES
+
+=head2 Shared Data
 
 A timed event where the event callback shares a hash reference with the main
 program.
@@ -214,6 +223,55 @@ program.
     sub callback {
         $h->{a}++;
     }
+
+=head2 Event crash: Restart event
+
+use warnings;
+use strict;
+use feature 'say';
+
+use Async::Event::Interval;
+
+my $event = Async::Event::Interval->new(
+    2,
+    sub {
+        kill 9, $$;
+    },
+);
+
+$event->start;
+
+sleep 1; # do stuff
+
+if ($event->status == -1){
+    say "event crashed, restarting";
+    $event->restart;
+}
+
+=head2 Event crash: End program
+
+use warnings;
+use strict;
+use feature 'say';
+
+use Async::Event::Interval;
+
+my $event = Async::Event::Interval->new(
+    2,
+    sub {
+        kill 9, $$;
+    },
+);
+
+$event->start;
+
+sleep 1; # do stuff
+
+if ($event->status == -1){
+    say "event crashed, can't continue...";
+    exit;
+}
+
 
 =head1 AUTHOR
 

@@ -7,7 +7,7 @@ use Async::Event::Interval;
 my $timeout = 1;
 
 my $event = Async::Event::Interval->new(
-    1,
+    2,
     sub {
         local $SIG{ALRM} = sub { kill 9, $$; };
         alarm $timeout;
@@ -18,10 +18,11 @@ my $event = Async::Event::Interval->new(
 );
 
 $event->start;
+say "status ok" if $event->status;
 
-for (1..10){
-    say "status ok" if $event->status;
-    say $event->status;
+for (1..3){
+
+    sleep 1;
 
     if ($event->status == -1){
         say "event crashed, restarting";
@@ -29,7 +30,6 @@ for (1..10){
         say "status ok after restart" if $event->status;
     }
 
-    sleep 1;
+    printf "status %d, pid: %d\n", $event->status ? 1 : 0, $event->_pid;
+
 }
-
-

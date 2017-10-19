@@ -7,6 +7,9 @@ Revision history for Fork-Event-Interval
           status() to be much more reliable (and effective)
         - we now set $SIG{CHLD}="IGNORE" to avoid defunct processes
         - added Carp (croak) for all fatal errors
+        - status() now returns -1 if an event has crashed, providing the user
+          with the ability to restart the event, or take other action
+        - added examples/timeout.pl and examples/event_crash.pl
 
 0.03    2016-10-16
         - removed restart(), and aliased it instead to start()
