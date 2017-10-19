@@ -5,7 +5,10 @@ use strict;
 
 our $VERSION = '0.04';
 
+use Carp qw(croak);
 use Parallel::ForkManager;
+
+$SIG{CHLD} = "IGNORE";
 
 sub new {
     my $self = bless {}, shift;
@@ -26,23 +29,57 @@ sub start {
 *restart = \&start;
 sub stop {
     my $self = shift;
-    kill 9, $self->{pid};
+
+    kill 9, $self->_pid;
+
     $self->{started} = 0;
     $self->{stop} = 1;
+
+    # time to ensure the proc was killed
+
+    sleep 1;
+
+    if (kill 0, $self->_pid){
+        croak "Event stop was called, but the process hasn't been killed. " .
+              "This is a fatal event. Exiting...\n";
+    }
+
 }
 sub status {
     my $self = shift;
-    return $self->{started};
+
+    if ($self->{started}){
+        if (! $self->_pid){
+            croak "Event is started, but no PID can be found. This is a " .
+                  "fatal error. Exiting...\n";
+        }
+        if ($self->_pid > 0){
+            if (kill 0, $self->_pid){
+                return $self->_pid;
+            }
+            else {
+                # proc must have crashed
+                $self->_pid(0);
+                return -1;
+            }
+        }
+        return 0;
+    }
 }
 sub _event {
     my $self = shift;
-
+    my $pid;
     for (0..1){
-        my $pid = $self->{pm}->start;
+        $pid = $self->{pm}->start;
         if ($pid){
+            # this is the parent process
             $self->_pid($pid);
             last;
         }
+
+        # set the child's proc id
+        $self->_pid($$);
+
         while(1){
             $self->{cb}->(@{ $self->{args} });
             sleep $self->{interval};
@@ -96,7 +133,10 @@ an event that can share data with the main application, see L</EXAMPLES>.
         $event->stop if $_ == 3;
         $event->start if $_ == 7;
 
-        print "event is running: " . $event->status . "\n";
+        if ($event->status){
+            print "event is running\n";
+        }
+
         sleep 1;
     }
 
@@ -150,7 +190,7 @@ Alias for C<start()>. Re-starts a C<stop()>ped event.
 
 =head2 status
 
-Return C<0> (false) if the event is not running, and C<1> (true) if it is.
+Returns the event's process ID (true) if it is running, and C<0> (false) if not.
 
 =head1 EXAMPLES
 
