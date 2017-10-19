@@ -1,6 +1,6 @@
 Revision history for Fork-Event-Interval
 
-0.04 UNREL
+0.04    2017-10-19
         - added examples/shared.pl, shared variable between all events and
           the parent
         - major overhaul on PID handling which provided the ability to rework
