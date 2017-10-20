@@ -3,7 +3,7 @@ package Async::Event::Interval;
 use warnings;
 use strict;
 
-our $VERSION = '0.05';
+our $VERSION = '1.00';
 
 use Carp qw(croak);
 use Parallel::ForkManager;
