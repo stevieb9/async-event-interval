@@ -221,6 +221,19 @@ isn't, and C<-1> if the event has crashed.
 
 =head1 EXAMPLES
 
+=head2 Run Once
+
+Send in an interval of zero (C<0>) to have your event run a single time. Call
+C<start()> repeatedly for numerous runs.
+
+    use Async::Event::Interval
+
+    my $event = Async::Event::Interval->new(0, sub {print "hey\n";});
+
+    $event->start;
+
+    $event->start if $event->status != -1; # run if not running
+
 =head2 Event Parameters
 
 You can send in a list of parameters to the event callback. Changing these
