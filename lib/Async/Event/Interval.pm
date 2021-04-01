@@ -85,12 +85,21 @@ sub _event {
         }
 
         # set the child's proc id
+
         $self->_pid($$);
 
-        while(1){
-            $self->{cb}->(@{ $self->{args} });
-            sleep $self->{interval};
+        # if no interval, run only once
+
+        if ($self->{interval}) {
+            while (1) {
+                $self->{cb}->(@{$self->{args}});
+                sleep $self->{interval};
+            }
         }
+        else {
+            $self->{cb}->(@{$self->{args}});
+        }
+
         $self->{pm}->finish;
     }
 }
@@ -101,6 +110,7 @@ sub _pid {
 }
 sub _set {
     my ($self, $interval, $cb, @args) = @_;
+
     $self->{interval} = $interval;
     $self->{cb} = $cb;
     $self->{args} = \@args;
@@ -162,7 +172,7 @@ L</EXAMPLES>.
 =head1 DESCRIPTION
 
 Very basic implementation of asynchronous events that are triggered by a timed
-interval.
+interval. If no time is specified, we'll run the event only once.
 
 Variables are not shared between the main application and the event. To do that,
 you'll need to use some form of memory sharing, such as L<IPC::Shareable>. See
@@ -183,7 +193,8 @@ Parameters:
     $delay
 
 Mandatory: The interval on which to trigger your event callback, in seconds.
-Represent partial seconds as a floating point number.
+Represent partial seconds as a floating point number. If zero is specified,
+we'll simply run the event once and stop.
 
     $callback
 
@@ -239,8 +250,9 @@ program.
     use Async::Event::Interval;
     use IPC::Shareable;
 
-    my $href = {a => 0, b => 1};
+    my $href;
     tie $href, 'IPC::Shareable', undef;
+    $href = {a => 0, b => 1};
 
     my $event
         = Async::Event::Interval->new(10, \&callback);
