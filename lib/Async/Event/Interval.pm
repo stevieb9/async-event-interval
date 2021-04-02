@@ -73,6 +73,11 @@ sub status {
     return -1 if defined $self->_pid && $self->_pid == -99;
     return 0;
 }
+sub waiting {
+    my ($self) = @_;
+    return 1 if ! $self->status || $self->status == -1;
+    return 0;
+}
 sub _event {
     my $self = shift;
     
@@ -219,6 +224,11 @@ Alias for C<start()>. Re-starts a C<stop()>ped event.
 Returns the event's process ID (true) if it is running, C<0> (false) if it
 isn't, and C<-1> if the event has crashed.
 
+=head2 waiting
+
+Returns true if the event is dormant and is ready for a C<start()> or C<restart>
+command. Returns false if the event is already running.
+
 =head1 EXAMPLES
 
 =head2 Run Once
@@ -232,7 +242,9 @@ C<start()> repeatedly for numerous runs.
 
     $event->start;
 
-    $event->start if $event->status != -1; # run if not running
+    # Do stuff, then run the event again if it's done its previous task
+
+    $event->start if $event->waiting;
 
 =head2 Event Parameters
 
@@ -263,15 +275,14 @@ program.
     use Async::Event::Interval;
     use IPC::Shareable;
 
-    my $href;
-    tie $href, 'IPC::Shareable', undef;
-    $href = {a => 0, b => 1};
+    tie my $scalar, 'IPC::Shareable', undef;
+    $scalar = "hello";
 
     my $event
         = Async::Event::Interval->new(10, \&callback);
 
     sub callback {
-        $h->{a}++;
+        $scalar = "hello, world!";
     }
 
 =head2 Event crash: Restart event
