@@ -133,8 +133,9 @@ __END__
 Async::Event::Interval - Extremely simple timed asynchronous events
 
 =for html
-<a href="http://travis-ci.org/stevieb9/async-event-interval"><img src="https://secure.travis-ci.org/stevieb9/async-event-interval.png"/></a>
+<a href="https://github.com/stevieb9/async-event-interval/actions"><img src="https://github.com/stevieb9/async-event-interval/workflows/CI/badge.svg"/></a>
 <a href='https://coveralls.io/github/stevieb9/async-event-interval?branch=master'><img src='https://coveralls.io/repos/stevieb9/async-event-interval/badge.svg?branch=master&service=github' alt='Coverage Status' /></a>
+
 
 =head1 SYNOPSIS
 
@@ -339,7 +340,7 @@ Steve Bertrand, C<< <steveb at cpan.org> >>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2017 Steve Bertrand.
+Copyright 2021 Steve Bertrand.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
