@@ -1,5 +1,8 @@
 Revision history for Fork-Event-Interval
 
+1.02 UNREL
+    -
+
 1.01    2021-04-14
         - If interval is set to zero, we'll run only once
         - Added IPC::Shareable as prerequisite
