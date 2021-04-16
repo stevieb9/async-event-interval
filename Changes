@@ -1,6 +1,6 @@
 Revision history for Fork-Event-Interval
 
-1.02 UNREL
+1.02    2021-04-15
     - Updated shared data example to be a scalar
     - Update t/10-shared.t as it was failing under MacOS/FreeBSD
 
