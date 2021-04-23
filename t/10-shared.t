@@ -7,6 +7,11 @@ use Test::More;
 require IPC::Shareable;
 import IPC::Shareable;
 
+# duplicate key
+# scalar values only
+# multiple scalars per event
+# class or object based?
+
 my $mod = 'Async::Event::Interval';
 
 tie my $scalar, 'IPC::Shareable', undef;
