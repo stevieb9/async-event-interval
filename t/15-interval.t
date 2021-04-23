@@ -10,7 +10,7 @@ my $mod = 'Async::Event::Interval';
 my $file = 't/test.data';
 
 my $x = 0;
-is $x, 0, "baselline var ok";
+is $x, 0, "baseline var ok";
 
 my $e = $mod->new(1, \&perform, $x);
 $e->start;
