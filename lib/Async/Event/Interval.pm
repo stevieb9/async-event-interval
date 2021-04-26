@@ -25,9 +25,10 @@ sub new {
     $self->{pm} = Parallel::ForkManager->new(1);
     $self->_set(@_);
     $self->{started} = 0;
-    $self->{id} = $id;
 
+    $self->{id} = $id;
     $id++;
+    $events{$self->id} = {};
 
     return $self;
 }
