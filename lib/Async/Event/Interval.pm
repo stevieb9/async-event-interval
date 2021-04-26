@@ -18,9 +18,7 @@ $SIG{__WARN__} = sub {
 my $id = 0;
 my %events;
 
-sub events {
-    return \%events;
-}
+*restart = \&start;
 
 sub new {
     my $self = bless {}, shift;
@@ -33,6 +31,9 @@ sub new {
 
     return $self;
 }
+sub events {
+    return \%events;
+}
 sub id {
     return $_[0]->{id};
 }
@@ -40,7 +41,6 @@ sub info {
     my ($self) = @_;
     return $self->events()->{$self->id};
 }
-
 sub shared_scalar {
     my ($self) = @_;
 
@@ -61,7 +61,29 @@ sub start {
     $self->{started} = 1;
     $self->_event;
 }
-*restart = \&start;
+sub status {
+    my $self = shift;
+
+    if ($self->{started}){
+        if (! $self->_pid){
+            croak "Event is started, but no PID can be found. This is a " .
+                "fatal error. Exiting...\n";
+        }
+        if ($self->_pid > 0){
+            if (kill 0, $self->_pid){
+                return $self->_pid;
+            }
+            else {
+                # proc must have crashed
+                $self->{started} = 0;
+                $self->_pid(-99);
+                return -1;
+            }
+        }
+    }
+    return -1 if defined $self->_pid && $self->_pid == -99;
+    return 0;
+}
 sub stop {
     my $self = shift;
 
@@ -81,34 +103,12 @@ sub stop {
         }
     }
 }
-sub status {
-    my $self = shift;
-
-    if ($self->{started}){
-        if (! $self->_pid){
-            croak "Event is started, but no PID can be found. This is a " .
-                  "fatal error. Exiting...\n";
-        }
-        if ($self->_pid > 0){
-            if (kill 0, $self->_pid){
-                return $self->_pid;
-            }
-            else {
-                # proc must have crashed
-                $self->{started} = 0;
-                $self->_pid(-99);
-                return -1;
-            }
-        }
-    }
-    return -1 if defined $self->_pid && $self->_pid == -99;
-    return 0;
-}
 sub waiting {
     my ($self) = @_;
     return 1 if ! $self->status || $self->status == -1;
     return 0;
 }
+
 sub _event {
     my $self = shift;
     
@@ -167,6 +167,7 @@ sub DESTROY {
     $_[0]->stop if $_[0]->_pid;
 }
 sub _vim{}
+
 1;
 
 __END__
@@ -194,6 +195,9 @@ L</EXAMPLES>.
         \&callback
     );
 
+    my $shared_scalar = $event->shared_scalar;
+    $$shared_scalar = 0;
+
     $event->start;
 
     for (1..10){
@@ -215,7 +219,8 @@ L</EXAMPLES>.
     }
 
     sub callback {
-        print "timed event callback\n";
+        $$shared_scalar++;
+        print "timed event callback: $$shared_scalar\n";
     }
 
 =head1 DESCRIPTION
@@ -272,6 +277,48 @@ isn't, and C<-1> if the event has crashed.
 
 Returns true if the event is dormant and is ready for a C<start()> or C<restart>
 command. Returns false if the event is already running.
+
+=head2 shared_scalar
+
+Returns a reference to a scalar variable that can be shared between the main
+process and the events. This reference can be used within multiple events.
+
+To read from or assign to the returned scalar, you must dereference it:
+C<$$shared_scalar = 1;>.
+
+=head2 id
+
+Returns the integer ID of the event.
+
+=head2 info
+
+Returns a hash reference containing various data about the event. Eg.
+
+    $VAR1 = {
+              'shared_scalars' => {
+                                    '0x55435449' => \'hello, world!,
+                                    '0x43534644' => \98
+                                  },
+              'pid' => 6841
+            };
+
+=head2 events
+
+This is a class method that returns a hash reference that contains the data of
+all existing events. Call it with C<Async::Event::Interval::events()>.
+
+    $VAR1 = {
+              '0' => {
+                       'shared_scalars' => {
+                                             '0x555A4654' => \'hello, world',
+                                             '0x4C534758' => \98
+                                           },
+                       'pid' => 11859
+                     },
+              '1' => {
+                       'pid' => 11860
+                     }
+            };
 
 =head1 EXAMPLES
 

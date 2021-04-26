@@ -6,19 +6,15 @@ use Data::Dumper;
 use IPC::Shareable;
 use Test::More;
 
-
-# duplicate key
-# multiple scalars per event
-# class or object based?
-
 my $mod = 'Async::Event::Interval';
 my $e = $mod->new(1, \&perform);
+my $x = $mod->new(0, \&multi);
 
 my $scalar_a = $e->shared_scalar;
 my $scalar_b = $e->shared_scalar;
 
-is ref $scalar_a, 'SCALAR', "shared var a is undef when initialized" ;
-is ref $scalar_b, 'SCALAR', "shared var b is undef when initialized" ;
+is ref $scalar_a, 'SCALAR', "shared var a is a scalar when initialized" ;
+is ref $scalar_b, 'SCALAR', "shared var b is a scalar when initialized" ;
 
 $$scalar_a = -1;
 is $$scalar_a, -1, "shared var a has original value -1 before event start" ;
@@ -32,9 +28,19 @@ $e->stop;
 is $$scalar_a, 99, "shared var a has updated value after event start" ;
 is $$scalar_b, 98, "shared var b has updated value after event start" ;
 
+$x->start;
+sleep 1;
+$x->stop;
+
+is $$scalar_a, 'hello, world', "shared var a has updated value in separate event" ;
+
 sub perform {
     $$scalar_a = 99;
     $$scalar_b = 98;
+}
+
+sub multi {
+    $$scalar_a = 'hello, world';
 }
 
 print Dumper Async::Event::Interval::events();
