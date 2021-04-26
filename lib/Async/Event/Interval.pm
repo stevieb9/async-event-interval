@@ -6,6 +6,7 @@ use strict;
 our $VERSION = '1.03';
 
 use Carp qw(croak);
+use IPC::Shareable;
 use Parallel::ForkManager;
 
 $SIG{CHLD} = "IGNORE";
@@ -14,17 +15,47 @@ $SIG{__WARN__} = sub {
     warn $warn if $warn !~ /^child process/;
 };
 
+my $id = 0;
+my %events;
+
+sub events {
+    return \%events;
+}
+
 sub new {
     my $self = bless {}, shift;
     $self->{pm} = Parallel::ForkManager->new(1);
     $self->_set(@_);
     $self->{started} = 0;
+    $self->{id} = $id;
+
+    $id++;
+
     return $self;
+}
+sub id {
+    return $_[0]->{id};
+}
+sub info {
+    my ($self) = @_;
+    return $self->events()->{$self->id};
+}
+
+sub shared_scalar {
+    my ($self) = @_;
+
+    my $shm_key = _rand_shm_key();
+
+    tie my $scalar, 'IPC::Shareable', $shm_key, {create => 1, destroy => 1};
+
+    $events{$self->id}->{shared_scalars}{$shm_key} = \$scalar;
+
+    return \$scalar;
 }
 sub start {
     my $self = shift;
     if ($self->{started}){
-        warn "event already running...\n";
+        warn "Event already running...\n";
         return;
     }
     $self->{started} = 1;
@@ -111,7 +142,19 @@ sub _event {
 sub _pid {
     my ($self, $pid) = @_;
     $self->{pid} = $pid if defined $pid;
+    $events{$self->id}->{pid} = $self->{pid};
     return $self->{pid} || undef;
+}
+sub _rand_shm_key {
+    my $key_str;
+
+    for (0..3) {
+        $key_str .= ('A'..'Z')[rand(26)];
+    }
+
+    my $key_hex = sprintf('0x%X', unpack 'i', $key_str);
+
+    return $key_hex;
 }
 sub _set {
     my ($self, $interval, $cb, @args) = @_;
@@ -130,7 +173,7 @@ __END__
 
 =head1 NAME
 
-Async::Event::Interval - Extremely simple timed asynchronous events
+Async::Event::Interval - Timed and one-off asynchronous events
 
 =for html
 <a href="https://github.com/stevieb9/async-event-interval/actions"><img src="https://github.com/stevieb9/async-event-interval/workflows/CI/badge.svg"/></a>
