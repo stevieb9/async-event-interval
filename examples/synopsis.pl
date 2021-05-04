@@ -5,27 +5,16 @@ use Async::Event::Interval;
 
 my $event = Async::Event::Interval->new(2, \&callback);
 
-my $shared_scalar_json      = $event->shared_scalar;
-my $shared_scalar_data_flag = $event->shared_scalar;
-
-$$shared_scalar_data_flag = 0;
+my $shared_scalar_json = $event->shared_scalar;
 
 $event->start;
 
 while (1) {
-
-    if ($$shared_scalar_data_flag) {
-        print "$$shared_scalar_json\n";
-        $$shared_scalar_data_flag = 0;
-    }
+    print "$$shared_scalar_json\n" if defined $$shared_scalar_json;
+    sleep 1;
 }
 
 sub callback {
-
-    my $json = ...; # Fetch JSON from a website
-
-    if ($json) {
-        $$shared_scalar_json = $json;
-        $$shared_scalar_data_flag = 1;
-    }
+    # Fetch JSON from a website
+    $$shared_scalar_json = '{"a": 1}';
 }
