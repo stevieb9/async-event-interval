@@ -130,7 +130,7 @@ sub _event {
         if ($self->{interval}) {
             while (1) {
                 $self->{cb}->(@{$self->{args}});
-                sleep $self->{interval};
+                select(undef, undef, undef, $self->{interval});
             }
         }
         else {
@@ -230,7 +230,7 @@ Each event is simply a separate forked process, which runs in a while loop.
 
 =head1 METHODS
 
-=head2 new($delay, $callback)
+=head2 new($delay, $callback, @params)
 
 Returns a new C<Async::Event::Interval> object. Does not create the event. Use
 C<start> for that.
@@ -247,6 +247,12 @@ we'll simply run the event once and stop.
 
 Mandatory: A reference to a subroutine that will be called every time the
 interval expires.
+
+    @params
+
+Optional, List: A list of parameters to pass to the callback. Note that these
+are not shared parameters and are a copy only, so changes to them in the main
+code will not be seen in the event, and vice-versa.
 
 =head2 start
 

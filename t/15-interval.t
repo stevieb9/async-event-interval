@@ -2,45 +2,44 @@ use strict;
 use warnings;
 
 use Async::Event::Interval;
-use Time::HiRes qw(usleep);
 use Test::More;
 
 my $mod = 'Async::Event::Interval';
 
-my $file = 't/test.data';
+# Test timed interval
 
-my $x = 0;
-is $x, 0, "baseline var ok";
+my $e = $mod->new(1, \&perform);
 
-my $e = $mod->new(1, \&perform, $x);
+my $x = $e->shared_scalar;
+$$x = 0;
+
+is $$x, 0, "baseline var ok";
+
 $e->start;
 
 sleep 2;
-my $data = data();
-ok $data > 0 && $data < 30, "event is async and correct";
+
+is $$x > 0 && $$x < 30, 1, "event is async and correct";
 
 sleep 2;
 $e->stop;
-$data = data();
-ok $data >= 30, "event is async, and is correct again";
+
+is $$x >= 30, 1, "event is async, and is correct again";
+
+# decimal interval
+
+my $e2 = Async::Event::Interval->new(1.7, \&timed);
+my $t = $e2->shared_scalar;
+$$t = time;
+$e2->start;
+sleep 2;
+$e2->stop;
 
 sub perform {
-    $x += 10;
-    open my $wfh, '>', $file or die $!;
-    print $wfh $x;
-    close $wfh;
+    $$x += 10;
 }
-sub data {
-    my $data;
-    {
-        local $/;
-        open my $fh, '<', $file or die $!;
-        $data = <$fh>;
-    }
-    return $data;
+sub timed {
+    my $time = time;
+    is $time - $$t > 1.5 && $time - $$t < 2, 1, "Event is 1.7 seconds ok";
 }
-
-unlink $file or die $!;
-is -e $file, undef, "temp file removed ok";
-
 done_testing();
