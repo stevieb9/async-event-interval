@@ -50,8 +50,8 @@ for (keys %$events) {
     is keys %{ $events->{$_}{shared_scalars} }, 2, "Event $_ has two shared scalars";
 
     for my $shared_key (keys %{ $events->{$_}{shared_scalars} }) {
-        like $shared_key, qr/^0x[\d\w]+$/, "Shared scalar key $_ is an int ok";
-        is ref $events->{$_}{shared_scalars}{$shared_key}, 'SCALAR', "Shared scalar $_ is a scalar ref";
+        like $shared_key, qr/^[A-Z]{4}$/, "Shared scalar key $shared_key is an int ok";
+        is ref $events->{$_}{shared_scalars}{$shared_key}, 'SCALAR', "Shared scalar $shared_key is a scalar ref";
         is ${ $events->{$_}{shared_scalars}{$shared_key} }, undef, "...and is undef";
     }
 }
@@ -62,7 +62,7 @@ for ($one, $two) {
     is $_->info()->{pid}, $events->{$id}{pid}, "info() pid matches for event $id";
 
     for my $shared_key (keys %{$_->info->{shared_scalars}}) {
-        like $shared_key, qr/^0x[\d\w]+$/, "Shared scalar key $shared_key is an int ok";
+        like $shared_key, qr/^[A-Z]{4}$/, "Shared scalar key $shared_key is an int ok";
         is ref $_->info->{shared_scalars}{$shared_key}, 'SCALAR', "Shared scalar $shared_key is a scalar ref";
         is ${$_->info->{shared_scalars}{$shared_key}}, undef, "...and is undef";
     }

@@ -153,9 +153,7 @@ sub _rand_shm_key {
         $key_str .= ('A'..'Z')[rand(26)];
     }
 
-    my $key_hex = sprintf('0x%X', unpack 'i', $key_str);
-
-    return $key_hex;
+   return $key_str;
 }
 sub _set {
     my ($self, $interval, $cb, @args) = @_;
@@ -184,44 +182,38 @@ Async::Event::Interval - Timed and one-off asynchronous events
 
 =head1 SYNOPSIS
 
-A simple event. Multiple events can be simultaneously used. For an example using
-an event that can share data with the main application, examples of how to
-handle event crashes, and how to send parameters to your event callback, see 
-L</EXAMPLES>.
+A simple event that updates JSON data from a website while allowing the main
+application to continue running in the foreground. Multiple events can be
+simultaneously used.
+
+See L</EXAMPLES> for other various functionality of this module.
+
+    use warnings;
+    use strict;
 
     use Async::Event::Interval;
 
-    my $event = Async::Event::Interval->new(
-        1.5, 
-        \&callback
-    );
+    my $event = Async::Event::Interval->new(2, \&callback);
 
-    my $shared_scalar = $event->shared_scalar;
-    $$shared_scalar = 0;
+    my $shared_scalar_json      = $event->shared_scalar;
 
     $event->start;
 
-    for (1..10){
-        print "$_: in main loop\n";
+    while (1) {
+        print "$$shared_scalar_json\n";
 
-        $event->stop if $_ == 3;
-        $event->start if $_ == 7;
-
-        if ($event->status){
-            print "event is running\n";
-        }
-
-        if ($event->status == -1){
-            print "event has crashed... restarting it\n";
+        if ($event->status == -1) {
+            # Event crashed
             $event->restart;
         }
-
-        sleep 1;
     }
 
     sub callback {
-        $$shared_scalar++;
-        print "timed event callback: $$shared_scalar\n";
+        my $json = ...; # Fetch JSON from a website
+
+        if ($json) {
+            $$shared_scalar_json = $json;
+        }
     }
 
 =head1 DESCRIPTION
@@ -282,7 +274,8 @@ command. Returns false if the event is already running.
 =head2 shared_scalar
 
 Returns a reference to a scalar variable that can be shared between the main
-process and the events. This reference can be used within multiple events.
+process and the events. This reference can be used within multiple events, and
+multiple shared scalars can be created by each event.
 
 To read from or assign to the returned scalar, you must dereference it:
 C<$$shared_scalar = 1;>.
@@ -296,12 +289,12 @@ Returns the integer ID of the event.
 Returns a hash reference containing various data about the event. Eg.
 
     $VAR1 = {
-              'shared_scalars' => {
-                                    '0x55435449' => \'hello, world!,
-                                    '0x43534644' => \98
-                                  },
-              'pid' => 6841
-            };
+        'shared_scalars' => {
+            '0x55435449' => \'hello, world!,
+            '0x43534644' => \98
+         },
+        'pid' => 6841,
+    };
 
 =head2 events
 
@@ -309,17 +302,17 @@ This is a class method that returns a hash reference that contains the data of
 all existing events. Call it with C<Async::Event::Interval::events()>.
 
     $VAR1 = {
-              '0' => {
-                       'shared_scalars' => {
-                                             '0x555A4654' => \'hello, world',
-                                             '0x4C534758' => \98
-                                           },
-                       'pid' => 11859
-                     },
-              '1' => {
-                       'pid' => 11860
-                     }
-            };
+        '0' => {
+            'shared_scalars' => {
+                '0x555A4654' => \'hello, world',
+                '0x4C534758' => \98
+             },
+            'pid' => 11859,
+        },
+        '1' => {
+            'pid' => 11860
+        }
+    };
 
 =head1 EXAMPLES
 
@@ -357,24 +350,6 @@ event itself.
     sub callback {
         my ($one, $two, $three) = @_;
         print "$one, $two, $three\n";
-    }
-
-=head2 Shared Data
-
-A timed event where the event callback shares a scalar variable with the main
-program.
-
-    use Async::Event::Interval;
-    use IPC::Shareable;
-
-    tie my $scalar, 'IPC::Shareable', 'KEY', {create => 1, destroy => 1};
-    $scalar = "hello";
-
-    my $event
-        = Async::Event::Interval->new(10, \&callback);
-
-    sub callback {
-        $scalar = "hello, world!";
     }
 
 =head2 Event crash: Restart event
