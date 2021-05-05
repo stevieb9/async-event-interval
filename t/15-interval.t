@@ -19,6 +19,8 @@ $e->start;
 
 sleep 2;
 
+print "X: $$x\n";
+
 is $$x > 0 && $$x < 30, 1, "event is async and correct";
 
 sleep 2;

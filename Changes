@@ -8,6 +8,8 @@ Revision history for Fork-Event-Interval
     - Added shared_scalar() object method; Returns a reference to a scalar
       that resides in shared memory. We use IPC::Shareable for the backend
     - Fixed issue where fractional seconds weren't being honoured
+    - POD updates, including a new SYNOPSIS
+    - Added accessor methods for most object attributes
 
 1.02    2021-04-15
     - Updated shared data example to be a scalar
