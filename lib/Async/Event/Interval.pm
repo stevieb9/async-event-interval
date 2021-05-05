@@ -22,7 +22,7 @@ my %events;
 
 sub new {
     my $self = bless {}, shift;
-    $self->{pm} = Parallel::ForkManager->new(1);
+    $self->_pm;
     $self->_set(@_);
     $self->{started} = 0;
 
@@ -110,11 +110,30 @@ sub waiting {
     return 0;
 }
 
+sub _args {
+    my ($self, $args) = @_;
+
+    if (defined $args) {
+        $self->{args} = $args;
+    }
+
+    return $self->{args};
+}
+sub _cb {
+    my ($self, $cb) = @_;
+
+    if (defined $cb) {
+        die "Callback must be a code reference." if ref $cb ne 'CODE';
+        $self->{cb} = $cb;
+    }
+
+    return $self->{cb};
+}
 sub _event {
     my $self = shift;
     
     for (0..1){
-        my $pid = $self->{pm}->start;
+        my $pid = $self->_pm->start;
         if ($pid){
             # this is the parent process
             $self->_pid($pid);
@@ -127,18 +146,36 @@ sub _event {
 
         # if no interval, run only once
 
-        if ($self->{interval}) {
+        if ($self->_interval) {
             while (1) {
-                $self->{cb}->(@{$self->{args}});
-                select(undef, undef, undef, $self->{interval});
+                $self->_cb->(@{$self->_args});
+                select(undef, undef, undef, $self->_interval);
             }
         }
         else {
-            $self->{cb}->(@{$self->{args}});
+            $self->_cb->(@{$self->_args});
         }
 
-        $self->{pm}->finish;
+        $self->_pm->finish;
     }
+}
+sub _interval {
+    my ($self, $interval) = @_;
+
+    if (defined $interval) {
+        $self->{interval} = $interval;
+    }
+
+    return $self->{interval};
+}
+sub _pm {
+    my ($self) = @_;
+
+    if (! exists $self->{pm}) {
+        $self->{pm} = Parallel::ForkManager->new(1);
+    }
+
+    return $self->{pm};
 }
 sub _pid {
     my ($self, $pid) = @_;
@@ -157,11 +194,11 @@ sub _rand_shm_key {
 }
 sub _set {
     my ($self, $interval, $cb, @args) = @_;
-
-    $self->{interval} = $interval;
-    $self->{cb} = $cb;
-    $self->{args} = \@args;
+    $self->_interval($interval);
+    $self->_cb($cb);
+    $self->_args(\@args);
 }
+
 sub DESTROY {
     $_[0]->stop if $_[0]->_pid;
 }
