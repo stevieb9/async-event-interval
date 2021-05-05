@@ -11,10 +11,10 @@ $event->start;
 
 while (1) {
     print "$$shared_scalar_json\n" if defined $$shared_scalar_json;
-    sleep 1;
+
+    # Do other things
 }
 
 sub callback {
-    # Fetch JSON from a website
-    $$shared_scalar_json = '{"a": 1}';
+    $$shared_scalar_json = ...; # Fetch JSON from website
 }

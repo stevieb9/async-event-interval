@@ -224,9 +224,9 @@ Async::Event::Interval - Timed and one-off asynchronous events
 
 =head1 SYNOPSIS
 
-A simple event that updates JSON data from a website while allowing the main
-application to continue running in the foreground. Multiple events can be
-simultaneously used.
+A simple event that updates JSON data from a website using a shared scalar
+variable, while allowing the main application to continue running in the
+foreground. Multiple events can be simultaneously used if desired.
 
 See L</EXAMPLES> for other various functionality of this module.
 
@@ -237,38 +237,25 @@ See L</EXAMPLES> for other various functionality of this module.
 
     my $event = Async::Event::Interval->new(2, \&callback);
 
-    my $shared_scalar_json      = $event->shared_scalar;
+    my $shared_scalar_json = $event->shared_scalar;
 
     $event->start;
 
     while (1) {
-        print "$$shared_scalar_json\n";
+        print "$$shared_scalar_json\n" if defined $$shared_scalar_json;
 
-        if ($event->status == -1) {
-            # Event crashed
-            $event->restart;
-        }
+        # Do other things
     }
 
     sub callback {
-        my $json = ...; # Fetch JSON from a website
-
-        if ($json) {
-            $$shared_scalar_json = $json;
-        }
+        $$shared_scalar_json = ...; # Fetch JSON from website
     }
 
 =head1 DESCRIPTION
 
-Very basic implementation of asynchronous events that are triggered by a timed
-interval. If no time is specified, we'll run the event only once.
-
-Variables are not shared between the main application and the event. To do that,
-you'll need to use some form of memory sharing, such as L<IPC::Shareable>. See
-L</EXAMPLES> for an example. At this time, there is no real parameter passing or
-ability to return values. As I said... basic.
-
-Each event is simply a separate forked process, which runs in a while loop.
+Very basic implementation of asynchronous events with shared variables that are
+triggered by a timed interval. If no time is specified, we'll run the event only
+once.
 
 =head1 METHODS
 
@@ -294,7 +281,9 @@ interval expires.
 
 Optional, List: A list of parameters to pass to the callback. Note that these
 are not shared parameters and are a copy only, so changes to them in the main
-code will not be seen in the event, and vice-versa.
+code will not be seen in the event, and vice-versa. See L</shared_scalar> if
+you'd like to use variables that can be shared between the main application and
+the events.
 
 =head2 start
 
@@ -325,7 +314,7 @@ Returns a reference to a scalar variable that can be shared between the main
 process and the events. This reference can be used within multiple events, and
 multiple shared scalars can be created by each event.
 
-To read from or assign to the returned scalar, you must dereference it:
+To read from or assign to the returned scalar, you must dereference it. Eg.
 C<$$shared_scalar = 1;>.
 
 =head2 id
@@ -367,7 +356,7 @@ all existing events. Call it with C<Async::Event::Interval::events()>.
 =head2 Run Once
 
 Send in an interval of zero (C<0>) to have your event run a single time. Call
-C<start()> repeatedly for numerous runs.
+C<start()> repeatedly for numerous individual/one-off runs.
 
     use Async::Event::Interval
 
@@ -383,7 +372,8 @@ C<start()> repeatedly for numerous runs.
 
 You can send in a list of parameters to the event callback. Changing these
 within the main program will have no effect on the values sent into the
-event itself.
+event itself. These parameter variables are copies and are not shared. For
+shared variables, see L</shared_scalar>.
 
     use Async::Event::Interval
 
@@ -404,23 +394,17 @@ event itself.
 
     use warnings;
     use strict;
-    use feature 'say';
 
     use Async::Event::Interval;
 
-    my $event = Async::Event::Interval->new(
-        2,
-        sub {
-            kill 9, $$;
-        },
-    );
+    my $event = Async::Event::Interval->new(2, sub { kill 9, $$; });
 
     $event->start;
 
-    sleep 1; # do stuff
+    sleep 1; # Do stuff
 
     if ($event->status == -1){
-        say "event crashed, restarting";
+        print "Event crashed, restarting\n";
         $event->restart;
     }
 
@@ -428,25 +412,16 @@ event itself.
 
     use warnings;
     use strict;
-    use feature 'say';
 
     use Async::Event::Interval;
 
-    my $event = Async::Event::Interval->new(
-        2,
-        sub {
-            kill 9, $$;
-        },
-    );
+    my $event = Async::Event::Interval->new(1.7, sub { kill 9, $$; });
 
     $event->start;
 
-    sleep 1; # do stuff
+    sleep 1; # Do stuff
 
-    if ($event->status == -1){
-        say "event crashed, can't continue...";
-        exit;
-    }
+    die "Event crashed, can't continue" if $event->status == -1;
 
 =head1 AUTHOR
 
