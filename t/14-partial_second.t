@@ -21,6 +21,6 @@ sub perform {
     my $time = time;
     return if $time - $$t < 1;
     is $time - $$t > 1.6 && $time - $$t < 1.85, 1, "Event is 1.7 seconds ok";
+    done_testing();
 }
 
-done_testing();
