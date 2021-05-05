@@ -123,7 +123,7 @@ sub _cb {
     my ($self, $cb) = @_;
 
     if (defined $cb) {
-        die "Callback must be a code reference." if ref $cb ne 'CODE';
+        croak "Callback must be a code reference." if ref $cb ne 'CODE';
         $self->{cb} = $cb;
     }
 
