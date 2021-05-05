@@ -1,5 +1,8 @@
 Revision history for Fork-Event-Interval
 
+1.04 UNREL
+    -
+
 1.03    2021-05-05
     - Added events() class function, returns hash reference details of each
       event that's been created
