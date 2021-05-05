@@ -368,6 +368,27 @@ C<start()> repeatedly for numerous individual/one-off runs.
 
     $event->start if $event->waiting;
 
+=head2 Event Suicidal Timeout
+
+You can have your callback commit suicide if it takes too long to run. We use
+Perl's C<$SIG{ALRM}> and C<alarm()> to do this. In your main application, you
+can check the status of the event and restart it or whatever else you need.
+
+    my $event_timeout = 30;
+
+    my $event = Async::Event::Interval->new(
+        30,
+        sub {
+            local $SIG{ALRM} = sub { print "Committing suicide!\n"; kill 9, $$; };
+
+            alarm $event_timeout;
+
+            # Do stuff here. If it takes 30 seconds, we kill ourselves
+
+            alarm 0;
+        },
+    );
+
 =head2 Event Parameters
 
 You can send in a list of parameters to the event callback. Changing these

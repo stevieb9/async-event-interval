@@ -4,15 +4,15 @@ use feature 'say';
 
 use Async::Event::Interval;
 
-my $timeout = 1;
+my $timeout = 3;
 
 my $event = Async::Event::Interval->new(
     2,
     sub {
-        local $SIG{ALRM} = sub { kill 9, $$; };
+        local $SIG{ALRM} = sub { print "Committing suicide!\n"; kill 9, $$; };
         alarm $timeout;
         # do stuff here. If it takes too long, we kill ourselves
-        sleep 2;
+        sleep 4;
         alarm 0;
     },
 );
@@ -20,7 +20,7 @@ my $event = Async::Event::Interval->new(
 $event->start;
 say "status ok" if $event->status;
 
-for (1..3){
+for (1..5){
 
     sleep 1;
 
