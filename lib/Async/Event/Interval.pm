@@ -23,10 +23,10 @@ my %events;
 sub new {
     my $self = bless {}, shift;
     $self->_pm;
-    $self->_set(@_);
-    $self->{started} = 0;
+    $self->_setup(@_);
+    $self->_started(0);
 
-    $self->{id} = $id;
+    $self->id($id);
     $id++;
     $events{$self->id} = {};
 
@@ -36,6 +36,8 @@ sub events {
     return \%events;
 }
 sub id {
+    my ($self, $id) = @_;
+    $self->{id} = $id if defined $id;
     return $_[0]->{id};
 }
 sub info {
@@ -55,17 +57,17 @@ sub shared_scalar {
 }
 sub start {
     my $self = shift;
-    if ($self->{started}){
+    if ($self->_started){
         warn "Event already running...\n";
         return;
     }
-    $self->{started} = 1;
+    $self->_started(1);
     $self->_event;
 }
 sub status {
     my $self = shift;
 
-    if ($self->{started}){
+    if ($self->_started){
         if (! $self->_pid){
             croak "Event is started, but no PID can be found. This is a " .
                 "fatal error. Exiting...\n";
@@ -76,7 +78,7 @@ sub status {
             }
             else {
                 # proc must have crashed
-                $self->{started} = 0;
+                $self->_started(0);
                 $self->_pid(-99);
                 return -1;
             }
@@ -91,8 +93,7 @@ sub stop {
     if ($self->_pid){
         kill 9, $self->_pid;
 
-        $self->{started} = 0;
-        $self->{stop} = 1;
+        $self->_started(0);
 
         # time to ensure the proc was killed
 
@@ -192,13 +193,17 @@ sub _rand_shm_key {
 
    return $key_str;
 }
-sub _set {
+sub _setup {
     my ($self, $interval, $cb, @args) = @_;
     $self->_interval($interval);
     $self->_cb($cb);
     $self->_args(\@args);
 }
-
+sub _started {
+    my ($self, $started) = @_;
+    $self->{started} = $started if defined $started;
+    return $self->{started};
+}
 sub DESTROY {
     $_[0]->stop if $_[0]->_pid;
 }
