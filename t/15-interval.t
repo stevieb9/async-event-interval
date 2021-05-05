@@ -19,14 +19,9 @@ $e->start;
 
 sleep 2;
 
-print "X: $$x\n";
+is $$x >= 20, 1, "event is async and correct";
 
-is $$x > 0 && $$x < 30, 1, "event is async and correct";
-
-sleep 2;
 $e->stop;
-
-is $$x >= 30, 1, "event is async, and is correct again";
 
 sub perform {
     $$x += 10;
