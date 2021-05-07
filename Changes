@@ -2,7 +2,7 @@ Revision history for Fork-Event-Interval
 
 1.04 UNREL
     - Fix issue in t/45-params.t where done_testing() may have been called
-      multiple times
+      multiple times (fixes #5)
     -
 
 1.03    2021-05-05
