@@ -3,7 +3,7 @@ package Async::Event::Interval;
 use warnings;
 use strict;
 
-our $VERSION = '1.04';
+our $VERSION = '1.05';
 
 use Carp qw(croak);
 use IPC::Shareable;
