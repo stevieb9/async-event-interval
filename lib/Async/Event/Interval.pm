@@ -47,7 +47,20 @@ sub info {
 sub shared_scalar {
     my ($self) = @_;
 
-    my $shm_key = _rand_shm_key();
+    my $shm_key;
+    my $unique_shm_key_found = 0;
+
+    for (0..9) {
+        $shm_key = _rand_shm_key();
+        if (! exists $events{$self->id}->{shared_scalars}{$shm_key}) {
+            $unique_shm_key_found = 1;
+            last;
+        }
+    }
+
+    if (! $unique_shm_key_found) {
+        croak("Could not generate a unique shared memory segment.");
+    }
 
     tie my $scalar, 'IPC::Shareable', $shm_key, {create => 1, destroy => 1};
 
