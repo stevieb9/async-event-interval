@@ -17,7 +17,7 @@ is $$x, 0, "baseline var ok";
 
 $e->start;
 
-select(undef, undef, undef, 0.6);
+sleep 1;
 
 is $$x >= 20, 1, "event is async and correct";
 
