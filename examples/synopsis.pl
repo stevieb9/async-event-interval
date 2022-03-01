@@ -13,6 +13,8 @@ while (1) {
     print "$$shared_scalar_json\n" if defined $$shared_scalar_json;
 
     # Do other things
+
+    $event->restart if $event->error;
 }
 
 sub callback {

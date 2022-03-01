@@ -24,12 +24,12 @@ for (1..5){
 
     sleep 1;
 
-    if ($event->status == -1){
+    if ($event->error){
         say "event crashed, restarting";
         $event->restart;
         say "status ok after restart" if $event->status;
     }
 
-    printf "status %d, pid: %d\n", $event->status ? 1 : 0, $event->_pid;
+    printf "status %d, error: %d, pid: %d\n", $event->status ? 1 : 0, $event->error, $event->_pid;
 
 }
