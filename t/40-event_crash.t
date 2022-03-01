@@ -15,7 +15,7 @@ $event->start;
 
 is $event->status > 0, 1, "status ok at start";
 
-select(undef, undef, undef, 0.4);
+select(undef, undef, undef, 0.6);
 
 is $event->status, 0, "upon crash, status return ok";
 is $event->error, 1, "upon crash, error return ok";
