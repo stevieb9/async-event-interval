@@ -41,11 +41,11 @@ sub new {
     $self->id($id);
     $id++;
 
+    $events{$self->id} = {};
+
     $self->_pm;
     $self->_setup(@_);
     $self->_started(0);
-
-    $events{$self->id} = {};
 
     return $self;
 }
@@ -56,7 +56,7 @@ sub error {
 }
 sub errors {
     my ($self) = @_;
-    return $self->_errors;
+    return $self->_errors || 0;
 }
 sub error_message {
     my ($self) = @_;
@@ -89,7 +89,7 @@ sub interval {
 }
 sub runs {
     my ($self) = @_;
-    return $self->_runs;
+    return $self->_runs || 0;
 }
 sub shared_scalar {
     my ($self) = @_;
@@ -469,14 +469,16 @@ all existing events.
                 '0x555A4654' => \'hello, world',
                 '0x4C534758' => \98
              },
-            'pid'    => 11859,
-            'runs'   => 16,
-            'errors' => 0,
+            'pid'       => 11859,
+            'runs'      => 16,
+            'errors'    => 0,
+            'interval'  => 5,
         },
         '1' => {
-            'pid' => 11860,
-            'runs'  => 447,
-            'errors' => 2,
+            'pid'           => 11860,
+            'runs'          => 447,
+            'errors'        => 2,
+            'interval'      => 0.6,
             'error_message' => 'File notes.txt not found at scripts/write_file.pl line 227',
         }
     };
@@ -494,9 +496,10 @@ Returns a hash reference containing various data about the event. Eg.
             '0x55435449' => \'hello, world!,
             '0x43534644' => \98
          },
-        'pid'    => 6841,
-        'runs'   => 4077,
-        'errors' => 0,
+        'pid'      => 6841,
+        'runs'     => 4077,
+        'errors'   => 0,
+        'interval' => 1.4,
     };
 
 =head2 runs
@@ -520,7 +523,10 @@ C<start()> repeatedly for numerous individual/one-off runs.
 
     $event->start if $event->waiting;
 
-=head2 Change delay interval during run
+=head2 Change delay interval during operation
+
+Change the delay interval from 5 to 600 seconds after the event has fired 100
+times
 
     use Async::Event::Interval
 
@@ -528,26 +534,19 @@ C<start()> repeatedly for numerous individual/one-off runs.
 
     $event->start;
 
-    my $loop_count = 0;
-
     while (1) {
-        if ($loop_count > 100) {
-            $event->stop;
+        if ($event->runs == 100) {
             $event->interval(600);
-            $event->restart;
         }
 
         #... do stuff
-
-        $loop_count++;
     }
 
 =head2 Event error management
 
-    # If an event crashes, print out error information and restart
-    # the event. If an event crashes five or more times, print the
-    # most recent error message and halt the program so you can figure
-    # out what's wrong with your callback code.
+If an event crashes, print out error information and restart the event. If an
+event crashes five or more times, print the most recent error message and halt
+the program so you can figure out what's wrong with your callback code.
 
     use Async::Event::Interval
 
