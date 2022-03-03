@@ -1,5 +1,8 @@
 Revision history for Async-Event-Interval
 
+1.07 UNREL
+    -
+
 1.06    2022-03-03
     - Class level hash that contains information about all existing events
       now lives in shared memory so we can track operation informtion from
