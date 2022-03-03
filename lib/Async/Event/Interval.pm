@@ -332,29 +332,20 @@ See L</EXAMPLES> for other various functionality of this module.
 
     my $event = Async::Event::Interval->new(2, \&callback);
 
-    my $shared_scalar_json = $event->shared_scalar;
+    my $json = $event->shared_scalar;
 
     $event->start;
 
     while (1) {
-        print "$$shared_scalar_json\n" if defined $$shared_scalar_json;
+        print "$$json\n";
 
         #... do other things
-
-        if ($event->errors > 5) {
-            printf(
-                "Runs: %d, Runs errored: %d, Last error message: %s\n",
-                $event->runs,
-                $event->errors,
-                $event->error_message;
-            );
-        }
 
         $event->restart if $event->error;
     }
 
     sub callback {
-        $$shared_scalar_json = ...; # Fetch JSON from website
+        $$json = ...; # Fetch JSON from website
     }
 
 =head1 DESCRIPTION
