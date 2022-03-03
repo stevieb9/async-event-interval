@@ -37,12 +37,14 @@ while (! $shared_memory_segment_created) {
 
 sub new {
     my $self = bless {}, shift;
+
+    $self->id($id);
+    $id++;
+
     $self->_pm;
     $self->_setup(@_);
     $self->_started(0);
 
-    $self->id($id);
-    $id++;
     $events{$self->id} = {};
 
     return $self;
@@ -79,10 +81,11 @@ sub interval {
         if ($interval !~ /^\d+$/ && $interval !~ /^(\d+)?\.\d+$/) {
             croak "\$interval must be an integer or float";
         }
-        $self->{interval} = $interval;
+
+        $events{$self->id}->{interval} = $interval;
     }
 
-    return $self->{interval};
+    return $events{$self->id}->{interval};
 }
 sub runs {
     my ($self) = @_;

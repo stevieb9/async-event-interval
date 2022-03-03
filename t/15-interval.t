@@ -61,9 +61,9 @@ $e1->start;
 select(undef, undef, undef, 0.3);
 is $$y > 0, 1, "With interval of 0.2, execution runs at the right time";
 
-$e1->stop;
+#$e1->stop;
 $e1->interval(1);
-$e1->start;
+#$e1->start;
 
 $$y = 0;
 select(undef, undef, undef, 0.8);
