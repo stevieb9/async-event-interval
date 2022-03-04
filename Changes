@@ -1,7 +1,8 @@
 Revision history for Async-Event-Interval
 
 1.08 UNREL
-    -
+    - Added pid(), getter-only wrapper for _pid()
+    - Added example of using shared data with IPC::Shareable
 
 1.07    2022-03-03
     - interval() no longer requires stop/start of event to take effect
