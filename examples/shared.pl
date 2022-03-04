@@ -4,31 +4,26 @@ use strict;
 use Async::Event::Interval;
 use IPC::Shareable;
 
-my $glue = $$;
-my $options = {
-     create    => 1,
-     exclusive => 0,
-     mode      => 0644,
-     destroy   => 1,
-}; 
+tie my %shared_data, 'IPC::Shareable', {
+    key         => '123456789',
+    create      => 1,
+    exclusive   => 0,
+    destroy     => 1
+};
 
-my %shared = (callback => 0);
+$shared_data{$$}++;
 
-my $share = tie(
-    %shared, 
-    'IPC::Shareable', 
-    $glue, 
-    $options
-) or die "tie failed\n";
+my $event_one = Async::Event::Interval->new(
+    0.2,
+    sub { $shared_data{$$}++; }
+);
 
-my $event_one
-    = Async::Event::Interval->new(1.5, \&callback_one);
-
-my $event_two
-    = Async::Event::Interval->new(3, \&callback_two);
+my $event_two = Async::Event::Interval->new(
+    1,
+    sub { $shared_data{$$}++; }
+);
 
 $event_one->start;
-select(undef, undef, undef, 0.1);
 $event_two->start;
 
 sleep 10;
@@ -36,42 +31,20 @@ sleep 10;
 $event_one->stop;
 $event_two->stop;
 
-print "after events: $shared{a}\n";
-
-$shared{a} += 1000000;
-
-print "after mod: $shared{a}\n";
-
-$share->remove;
-$share->clean_up_all;
-
-sub callback_one {
-    $shared{a}++;
-    print "one: $shared{a}\n";
-}
-sub callback_two {
-    $shared{a} += 100;
-    print "two $shared{a}\n";
+for my $pid (keys %shared_data) {
+    printf("Process ID %d executed %d times\n", $pid, $shared_data{$pid});
 }
 
+for my $event ($event_one, $event_two) {
+    printf(
+        "Event ID %d with PID %d ran %d times, with %d errors and an interval" .
+        " of %.2f seconds\n",
+        $event->id,
+        $event->pid,
+        $event->runs,
+        $event->errors,
+        $event->interval
+    );
+}
 
-__END__
-
-one: 1
-two 101
-one: 102
-one: 103
-one: 104
-two 204
-one: 205
-one: 206
-one: 207
-two 307
-one: 308
-one: 309
-one: 310
-two 410
-one: 411
-after events: 411
-after mod: 1000411
-
+(tied %shared_data)->remove;

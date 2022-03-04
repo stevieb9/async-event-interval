@@ -3,7 +3,7 @@ package Async::Event::Interval;
 use warnings;
 use strict;
 
-our $VERSION = '1.07';
+our $VERSION = '1.08';
 
 use Carp qw(croak);
 use IPC::Shareable;
@@ -52,7 +52,7 @@ sub new {
 sub error {
     my ($self) = @_;
     $self->status;
-    return $self->_pid && $self->_pid == -99 ? 1 : 0;
+    return $self->pid && $self->pid == -99 ? 1 : 0;
 }
 sub errors {
     my ($self) = @_;
@@ -86,6 +86,10 @@ sub interval {
     }
 
     return $events{$self->id}->{interval};
+}
+sub pid {
+    my ($self) = @_;
+    return $self->_pid;
 }
 sub runs {
     my ($self) = @_;
@@ -128,13 +132,13 @@ sub status {
     my ($self) = @_;
 
     if ($self->_started){
-        if (! $self->_pid){
+        if (! $self->pid){
             croak "Event is started, but no PID can be found. This is a " .
                 "fatal error. Exiting...\n";
         }
-        if ($self->_pid > 0){
-            if (kill 0, $self->_pid){
-                return $self->_pid;
+        if ($self->pid > 0){
+            if (kill 0, $self->pid){
+                return $self->pid;
             }
             else {
                 # proc must have crashed
@@ -149,8 +153,8 @@ sub status {
 sub stop {
     my $self = shift;
 
-    if ($self->_pid){
-        kill 9, $self->_pid;
+    if ($self->pid){
+        kill 9, $self->pid;
 
         $self->_started(0);
 
@@ -158,7 +162,7 @@ sub stop {
 
         sleep 1;
 
-        if (kill 0, $self->_pid){
+        if (kill 0, $self->pid){
             croak "Event stop was called, but the process hasn't been killed. " .
                   "This is a fatal event. Exiting...\n";
         }
@@ -300,7 +304,7 @@ sub _started {
     return $self->{started};
 }
 sub DESTROY {
-    $_[0]->stop if $_[0]->_pid;
+    $_[0]->stop if $_[0]->pid;
 }
 sub _vim{}
 
@@ -493,6 +497,10 @@ Returns a hash reference containing various data about the event. Eg.
         'interval' => 1.4,
     };
 
+=head2 pid
+
+Returns the Process ID that the event is running under
+
 =head2 runs
 
 Returns the number of executions of the event's callback routine.
@@ -641,6 +649,67 @@ shared variables, see L</shared_scalar>.
     sleep 1; # Do stuff
 
     die "Event crashed, can't continue" if $event->error;
+
+=head2 Shared data across events
+
+This software uses L<IPC::Shareable> internally, so it's automatically
+installed for you already. You can use shared data for use across many processes
+and events, and if you use the same IPC key, even across multiple scripts.
+
+Here's an example that uses a hash that's stored in shared memory, where the
+parent process (the script) and two other processes (the two events) all share
+and update the same hash.
+
+The very last line removes the shared memory segments. You can remove this line
+if you want to reuse the same data later, or access it from other scripts.
+
+    use Async::Event::Interval;
+    use IPC::Shareable;
+
+    tie my %shared_data, 'IPC::Shareable', {
+        key         => '123456789',
+        create      => 1,
+        exclusive   => 0,
+        destroy     => 1
+    };
+
+    $shared_data{$$}++;
+
+    my $event_one = Async::Event::Interval->new(
+        0.2,
+        sub { $shared_data{$$}++; }
+    );
+
+    my $event_two = Async::Event::Interval->new(
+        1,
+        sub { $shared_data{$$}++; }
+    );
+
+    $event_one->start;
+    $event_two->start;
+
+    sleep 10;
+
+    $event_one->stop;
+    $event_two->stop;
+
+    for my $pid (keys %shared_data) {
+        printf("Process ID %d executed %d times\n", $pid, $shared_data{$pid});
+    }
+
+    for my $event ($event_one, $event_two) {
+        printf(
+            "Event ID %d with PID %d ran %d times, with %d errors and an interval" .
+            " of %.2f seconds\n",
+            $event->id,
+            $event->pid,
+            $event->runs,
+            $event->errors,
+            $event->interval
+        );
+    }
+
+    (tied %shared_data)->remove;
 
 =head1 AUTHOR
 
