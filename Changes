@@ -1,6 +1,9 @@
 Revision history for Async-Event-Interval
 
-1.08 UNREL
+1.09 UNREL
+    -
+
+1.08    2022-03-03
     - Added pid(), getter-only wrapper for _pid()
     - Added example of using shared data with IPC::Shareable
 
