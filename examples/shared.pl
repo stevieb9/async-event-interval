@@ -7,11 +7,10 @@ use IPC::Shareable;
 tie my %shared_data, 'IPC::Shareable', {
     key         => '123456789',
     create      => 1,
-    exclusive   => 0,
     destroy     => 1
 };
 
-$shared_data{$$}++;
+$shared_data{$$}{called_count}++;
 
 my $event_one = Async::Event::Interval->new(0.2, \&update);
 my $event_two = Async::Event::Interval->new(1, \&update);
@@ -19,13 +18,19 @@ my $event_two = Async::Event::Interval->new(1, \&update);
 $event_one->start;
 $event_two->start;
 
-sleep 10;
+my $seconds = 1;
+print "\nRunning for $seconds seconds...\n\n";
+sleep $seconds;
 
 $event_one->stop;
 $event_two->stop;
 
 for my $pid (keys %shared_data) {
-    printf("Process ID %d executed %d times\n", $pid, $shared_data{$pid});
+    printf(
+        "Process ID %d executed %d times\n",
+        $pid,
+        $shared_data{$pid}{called_count}
+    );
 }
 
 for my $event ($event_one, $event_two) {
@@ -40,12 +45,10 @@ for my $event ($event_one, $event_two) {
     );
 }
 
-(tied %shared_data)->remove;
-
 sub update {
     # Because each event runs in its own process, $$ will be set to the
     # process ID of the calling event, even though they both call this
     # same function
 
-    $shared_data{$$}++;
+    $shared_data{$$}{called_count}++;
 }

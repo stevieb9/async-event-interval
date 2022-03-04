@@ -1,7 +1,12 @@
 Revision history for Async-Event-Interval
 
 1.09 UNREL
-    -
+    - Bump prereq IPC::Shareable to 1.08 due to a fix in creating random SHM
+      keys in forked environments, major improvements of its _shm_key_rand()
+      function, and its ability to set a 'protected' option so our global shared
+      %events hash doesn't get cleaned up automatically
+    - Modified examples/shared.pl so it doen't leak segments and semaphores
+      after completion
 
 1.08    2022-03-03
     - Added pid(), getter-only wrapper for _pid()
