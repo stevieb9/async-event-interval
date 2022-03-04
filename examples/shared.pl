@@ -13,15 +13,8 @@ tie my %shared_data, 'IPC::Shareable', {
 
 $shared_data{$$}++;
 
-my $event_one = Async::Event::Interval->new(
-    0.2,
-    sub { $shared_data{$$}++; }
-);
-
-my $event_two = Async::Event::Interval->new(
-    1,
-    sub { $shared_data{$$}++; }
-);
+my $event_one = Async::Event::Interval->new(0.2, \&update);
+my $event_two = Async::Event::Interval->new(1, \&update);
 
 $event_one->start;
 $event_two->start;
@@ -48,3 +41,11 @@ for my $event ($event_one, $event_two) {
 }
 
 (tied %shared_data)->remove;
+
+sub update {
+    # Because each event runs in its own process, $$ will be set to the
+    # process ID of the calling event, even though they both call this
+    # same function
+
+    $shared_data{$$}++;
+}
