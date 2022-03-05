@@ -326,7 +326,7 @@ sub DESTROY {
 
     delete $events{$_[0]->id};
 }
-sub end {
+sub _end {
     if (keys %events) {
         warn "The following events remain: " . join(', ', keys %events);
     }
@@ -334,7 +334,7 @@ sub end {
     IPC::Shareable::clean_up_protected(_shm_lock());
 }
 END {
-    end();
+    _end();
 }
 sub _vim{}
 

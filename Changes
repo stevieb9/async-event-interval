@@ -10,8 +10,8 @@ Revision history for Async-Event-Interval
     - We now remove %events hash in END instead of DESTROY. This way we can have
       objects go out of scope in a script without blowing away the global shared
       data
-    - Added end() so that we can test the END block in unit tests. END{} calls
-      end() upon program termination
+    - Added _end() so that we can test the END block in unit tests. END{} calls
+      _end() upon program termination
 
 1.08    2022-03-03
     - Added pid(), getter-only wrapper for _pid()

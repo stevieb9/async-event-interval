@@ -39,7 +39,7 @@ my $mod = 'Async::Event::Interval';
     $sub->unmock;
 
     # Force the END block for cleanup
-    Async::Event::Interval::end();
+    Async::Event::Interval::_end();
 
     $register = IPC::Shareable::global_register;
     $keys = keys %$register;
