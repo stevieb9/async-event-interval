@@ -9,6 +9,7 @@ use Carp qw(croak);
 use IPC::Shareable;
 use Parallel::ForkManager;
 
+$SIG{CHLD} = 'IGNORE';
 $SIG{__WARN__} = sub {
     my $warn = shift;
     warn $warn if $warn !~ /^child process/;
@@ -327,8 +328,10 @@ sub DESTROY {
 }
 END {
     if (! keys %events) {
-        IPC::Shareable::clean_up_protected(_shm_lock());
+        warn "The following events remain: " . join(', ', keys %events);
     }
+
+    IPC::Shareable::clean_up_protected(_shm_lock());
 }
 sub _vim{}
 
