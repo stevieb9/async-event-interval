@@ -384,9 +384,8 @@ See L</EXAMPLES> for other various functionality of this module.
 
 =head1 DESCRIPTION
 
-Very basic implementation of asynchronous events with shared variables that are
-triggered by a timed interval. If a time of zero is specified, we'll run the
-event only once.
+Very basic implementation of asynchronous events triggered by a timed interval.
+If a time of zero is specified, we'll run the event only once.
 
 =head1 METHODS - EVENT OPERATION
 
@@ -562,7 +561,7 @@ times
     $event->start;
 
     while (1) {
-        if ($event->runs == 100) {
+        if ($event->runs > 99 && $event->interval != 600) {
             $event->interval(600);
         }
 
@@ -585,6 +584,11 @@ the program so you can figure out what's wrong with your callback code.
 
         #... do stuff
 
+        if ($event->errors >= 5) {
+            print $event->error_message;
+            exit;
+        }
+
         if ($event->error) {
             printf(
                 "Runs: %d, Runs errored: %d, Last error message: %s\n",
@@ -594,11 +598,6 @@ the program so you can figure out what's wrong with your callback code.
             );
 
             $event->restart;
-        }
-
-        if ($event->errors >= 5) {
-            print $event->error_message;
-            exit;
         }
     }
 
