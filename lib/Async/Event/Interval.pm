@@ -436,16 +436,14 @@ isn't.
 
 =head2 waiting
 
-Returns true if the event is dormant and is ready for a C<start()> or C<restart>
-command. Returns false if the event is already running.
+Returns true if the event is dormant and is ready for a C<start()> or
+C<restart()> command. Returns false if the event is already running.
 
 =head2 error
 
 Returns true if an event crashed unexpectedly in the background, and is ready
-for a C<start()> or C<restart()> command. Returns false if no errors have been
-encountered.
-
-otherwise.
+for a C<start()> or C<restart()> command. Returns false if the event is not in
+an error state.
 
 =head2 interval($seconds)
 
