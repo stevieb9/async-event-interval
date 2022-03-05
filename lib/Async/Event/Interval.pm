@@ -9,7 +9,6 @@ use Carp qw(croak);
 use IPC::Shareable;
 use Parallel::ForkManager;
 
-$SIG{CHLD} = "IGNORE";
 $SIG{__WARN__} = sub {
     my $warn = shift;
     warn $warn if $warn !~ /^child process/;
@@ -325,7 +324,8 @@ sub DESTROY {
     return if (caller())[0] eq 'Parallel::ForkManager::Child';
 
     delete $events{$_[0]->id};
-
+}
+END {
     if (! keys %events) {
         IPC::Shareable::clean_up_protected(_shm_lock());
     }
