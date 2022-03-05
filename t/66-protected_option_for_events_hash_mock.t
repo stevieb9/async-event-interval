@@ -34,9 +34,12 @@ my $mod = 'Async::Event::Interval';
 
     $register = IPC::Shareable::global_register;
     $keys = keys %$register;
-    is $keys, 2, "The \%events hash shm segment nor its cild wasn't removed ok";
+    is $keys, 2, "The \%events hash shm segment nor its child wasn't removed ok";
 
     $sub->unmock;
+
+    # Force the END block for cleanup
+    Async::Event::Interval::end();
 
     $register = IPC::Shareable::global_register;
     $keys = keys %$register;

@@ -37,6 +37,9 @@ my $mod = 'Async::Event::Interval';
         is $keys, 3, "Calling IPC::Shareable::clean_up_all leaves our \%event hash alone";
     }
 
+    # Force the END block for cleanup
+    Async::Event::Interval::end();
+
     $register = IPC::Shareable::global_register;
     $keys = keys %$register;
     is $keys, 0, "IPC::Shareable shows no entries after object out of scope ok";

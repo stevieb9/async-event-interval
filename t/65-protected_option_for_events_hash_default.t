@@ -25,6 +25,9 @@ my $mod = 'Async::Event::Interval';
         is $keys, 2, "IPC::Shareable shows two entries after event creation ok";
     }
 
+    # Force the END block for cleanup
+    Async::Event::Interval::end();
+
     $register = IPC::Shareable::global_register;
     $keys = keys %$register;
     is $keys, 0, "IPC::Shareable shows no entries after object out of scope ok";
