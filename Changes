@@ -1,13 +1,11 @@
 Revision history for Async-Event-Interval
 
-1.10    2022-03-07
-    - Fix issue where magic segments created by one process that are under a
-      segment created by a different process weren't being registered in the
-      %global_register hash, therefore they were not being cleaned up properly
-    - Test suite now saves the number of in-use shared memory segments before
-      test suite begin, and after test suite end. We then test to ensure these
-      are the same (ie. make sure all segments created during test suite run
-      are removed properly)
+1.10 UNREL
+    - Add tests to ensure that all shared memory segments created during the
+      unit test suite run get cleaned up ok
+    - Bump prereq of IPC::Shareable to 1.11 due to bug fix where child shared
+      memory segments created under one process weren't being registered if the
+      parent was created in a different process
 
 1.09    2022-03-05
     - Bump prereq IPC::Shareable to 1.08 due to a fix in creating random SHM
