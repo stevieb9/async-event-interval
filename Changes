@@ -1,5 +1,8 @@
 Revision history for Async-Event-Interval
 
+1.11 UNREL
+    -
+
 1.10    2022-03-07
     - Add tests to ensure that all shared memory segments created during the
       unit test suite run get cleaned up ok
