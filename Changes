@@ -1,5 +1,8 @@
 Revision history for Async-Event-Interval
 
+1.12 UNREL
+    -
+
 1.11    2022-03-09
     - Modified tests to run only on valid CI platforms
 
