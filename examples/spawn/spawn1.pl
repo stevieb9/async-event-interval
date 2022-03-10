@@ -5,6 +5,10 @@ use Async::Event::Interval;
 use Data::Dumper;
 use IPC::Shareable;
 
+if (! $ENV{CI_TESTING}) {
+    plan skip_all => "Not on a valid CI testing platform..."
+}
+
 tie my %shared_data, 'IPC::Shareable', {
     key         => '123456789',
     create      => 1,
