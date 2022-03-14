@@ -1,7 +1,10 @@
 Revision history for Async-Event-Interval
 
 1.12 UNREL
-    -
+    - Added $DESTROY_CALLED. In cases like using 'plackup', the process
+      terminates, executing END{}, but the event may still be in scope
+      in a global sense. This variable ensures that things are properly
+      dismantling themselves before we call _end()
 
 1.11    2022-03-09
     - Modified tests to run only on valid CI platforms
