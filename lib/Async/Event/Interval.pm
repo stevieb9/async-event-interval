@@ -18,12 +18,6 @@ $SIG{__WARN__} = sub {
 
 my $id = 0;
 
-# The following variable allows us to differenciate the actual END{} of a program
-# run, or the END{} of a process run. 'plackup' will END{}, but the event objects
-# may still be in scope. We don't want to destroy everything if this is the case
-
-my $DESTROY_CALLED = 0;
-
 my %events;
 my $shared_memory_protect_lock = _rand_shm_lock();
 
@@ -332,18 +326,12 @@ sub DESTROY {
 
     return if (caller())[0] eq 'Parallel::ForkManager::Child';
 
-    $DESTROY_CALLED = 1;
-
     delete $events{$_[0]->id};
 }
 sub _end {
-    return if ! $DESTROY_CALLED;
-
-    if (keys %events) {
-        warn "The following events remain: " . join(', ', keys %events);
+    if (! keys %events) {
+        IPC::Shareable::clean_up_protected(_shm_lock());
     }
-
-    IPC::Shareable::clean_up_protected(_shm_lock());
 }
 END {
     _end();

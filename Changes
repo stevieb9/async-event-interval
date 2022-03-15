@@ -1,10 +1,15 @@
 Revision history for Async-Event-Interval
 
 1.12 UNREL
-    - Added $DESTROY_CALLED. In cases like using 'plackup', the process
-      terminates, executing END{}, but the event may still be in scope
-      in a global sense. This variable ensures that things are properly
-      dismantling themselves before we call _end()
+    - Only remove the Async::Event::Interval protected shared %events hash
+      if it contains any keys (ie. event objects). When running in things
+      like 'plackup', END{} was being called on each browser session close,
+      but there were still objects, so we were trashing the %events
+      infrastructure prematurely
+    - Each unit test file now does pre-and-post segment counts and displays
+      them if PRINT_SEGS env var is true, and the suite itself has a before
+      and after count comparison to ensure the suite leaked no segments or
+      semaphores
 
 1.11    2022-03-09
     - Modified tests to run only on valid CI platforms
