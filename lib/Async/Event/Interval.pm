@@ -2,7 +2,6 @@ package Async::Event::Interval;
 
 use warnings;
 use strict;
-use feature 'say';
 
 our $VERSION = '1.12';
 
@@ -332,10 +331,7 @@ sub DESTROY {
     delete $events{$_[0]->id};
 }
 sub _end {
-#    print((caller(1))[3]);
-#    print "\n";
     if (! keys %events) {
-        print "cleaup\n";
         IPC::Shareable::clean_up_protected(_shm_lock());
     }
 }
