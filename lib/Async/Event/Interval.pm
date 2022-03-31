@@ -3,7 +3,7 @@ package Async::Event::Interval;
 use warnings;
 use strict;
 
-our $VERSION = '1.12';
+our $VERSION = '1.13';
 
 use Carp qw(croak);
 use Data::Dumper;

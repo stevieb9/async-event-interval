@@ -1,5 +1,8 @@
 Revision history for Async-Event-Interval
 
+1.13 UNREL
+    -
+
 1.12    2022-03-31
     - Only remove the Async::Event::Interval protected shared %events hash
       if it contains any keys (ie. event objects). When running in things
