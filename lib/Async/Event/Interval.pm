@@ -2,6 +2,7 @@ package Async::Event::Interval;
 
 use warnings;
 use strict;
+use feature 'say';
 
 our $VERSION = '1.12';
 
@@ -276,8 +277,10 @@ sub _pm {
 }
 sub _pid {
     my ($self, $pid) = @_;
-    $self->{pid} = $pid if defined $pid;
-    $events{$self->id}->{pid} = $self->{pid} if $self->{pid};
+    if (defined $pid) {
+        $self->{pid} = $pid;
+        $events{$self->id}->{pid} = $self->{pid};
+    }
     return $self->{pid} || undef;
 }
 sub _rand_shm_key {
@@ -329,7 +332,10 @@ sub DESTROY {
     delete $events{$_[0]->id};
 }
 sub _end {
+#    print((caller(1))[3]);
+#    print "\n";
     if (! keys %events) {
+        print "cleaup\n";
         IPC::Shareable::clean_up_protected(_shm_lock());
     }
 }
