@@ -1,6 +1,6 @@
 Revision history for Async-Event-Interval
 
-1.13 UNREL
+1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()
       method (closes #10)
     - Add prereq of Test::SharedFork to keep tests in order in t/46
