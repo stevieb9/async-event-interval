@@ -28,8 +28,9 @@ WriteMakefile(
         'ExtUtils::MakeMaker' => 0,
     },
     BUILD_REQUIRES => {
-        'Mock::Sub'  => 0,
-        'Test::More' => 0,
+        'Mock::Sub'        => 0,
+        'Test::More'       => 0,
+        'Test::SharedFork' => 0,
     },
     PREREQ_PM => {
         'IPC::Shareable'        => 1.11,

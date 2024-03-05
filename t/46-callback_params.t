@@ -2,6 +2,7 @@ use warnings;
 use strict;
 
 use Test::More;
+use Test::SharedFork;
 
 BEGIN {
     if (! $ENV{CI_TESTING}) {
@@ -31,11 +32,9 @@ for (0..2) {
 
 $event->stop;
 
-done_testing();
-
-sleep 1;
-
 warn "Segs after: " . `ipcs -m | wc -l` . "\n" if $ENV{PRINT_SEGS};
+
+done_testing();
 
 sub callback {
     my ($iter, $href) = @_;
