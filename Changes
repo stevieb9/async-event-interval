@@ -1,7 +1,8 @@
 Revision history for Async-Event-Interval
 
 1.13 UNREL
-    -
+    - Added ability to send in per-callback call parameters via the start()
+      method (closes #10)
 
 1.12    2022-03-31
     - Only remove the Async::Event::Interval protected shared %events hash
