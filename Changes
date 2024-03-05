@@ -1,7 +1,7 @@
 Revision history for Async-Event-Interval
 
 1.14 UNREL
-    -
+    - Add $count++ in callback exec params example in POD
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()

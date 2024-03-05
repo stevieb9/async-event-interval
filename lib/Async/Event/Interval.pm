@@ -671,6 +671,7 @@ For example:
     for my $href (@params) {
         $event->start($count, $href);
         while (! $event->waiting) {}
+        $count++;
     }
 
     sub callback {
