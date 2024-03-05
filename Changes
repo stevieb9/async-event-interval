@@ -2,6 +2,7 @@ Revision history for Async-Event-Interval
 
 1.14 UNREL
     - Add $count++ in callback exec params example in POD
+    - s/contains any/doesn't contain/ in Changes entry 1.12
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()
@@ -11,7 +12,7 @@ Revision history for Async-Event-Interval
 
 1.12    2022-03-31
     - Only remove the Async::Event::Interval protected shared %events hash
-      if it contains any keys (ie. event objects). When running in things
+      if it doesn't contain keys (ie. event objects). When running in things
       like 'plackup', END{} was being called on each browser session close,
       but there were still objects, so we were trashing the %events
       infrastructure prematurely
