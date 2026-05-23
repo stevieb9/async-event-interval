@@ -1255,6 +1255,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     select(undef, undef, undef, 0.05);
 
     my $e = Async::Event::Interval->new(0, sub {});
+    $e->_pid($pid);
 
     use Time::HiRes ();
     my $t0 = Time::HiRes::time();
@@ -1268,6 +1269,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         Async::Event::Interval::STOP_KILL_POLL_INTERVAL(),
         "_signal_and_wait returns immediately for already-dead pid "
       . "($elapsed s)";
+    $e->_pid(0);
 }
 
 # _signal_and_wait with a live child: sends the signal, polls until
@@ -1285,6 +1287,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     select(undef, undef, undef, 0.05);
 
     my $e = Async::Event::Interval->new(0, sub {});
+    $e->_pid($pid);
 
     use Time::HiRes ();
     my $t0 = Time::HiRes::time();
@@ -1300,6 +1303,8 @@ sub events_knot { Async::Event::Interval::_events_knot() }
       . "($elapsed s)";
     ok ! (kill 0, $pid),
         "_signal_and_wait: child pid is gone";
+
+    $e->_pid(0);
 }
 
 # _signal_and_wait timeout: when kill(0) keeps returning truthy past

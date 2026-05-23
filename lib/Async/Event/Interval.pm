@@ -18,7 +18,6 @@ use constant {
     STOP_KILL_POLL_INTERVAL => 0.05,
 };
 
-my $id = 0;
 
 $SIG{CHLD} = 'IGNORE';
 
@@ -26,6 +25,8 @@ my %events;
 my $shared_memory_protect_lock = _rand_shm_lock();
 
 _create_events_seg();
+
+my $creator_pid = $$;
 
 sub _create_events_seg {
     my $created;
@@ -93,10 +94,14 @@ sub _read_events {
 sub new {
     my $self = bless {}, shift;
 
-    $self->id($id);
-    $id++;
-
-    _write_events(sub { $events{$self->id} = {} });
+    _write_events(sub {
+        $events{_id_counter} //= 0;
+        $events{_event_count} //= 0;
+        my $id = $events{_id_counter}++;
+        $events{_event_count}++;
+        $self->id($id);
+        $events{$id} = {};
+    });
 
     $self->_pm;
     $self->_setup(@_);
@@ -121,6 +126,7 @@ sub events {
     return _read_events(sub {
         my %copy;
         for my $id (keys %events) {
+            next if $id =~ /^_/;
             my $event = $events{$id};
             $copy{$id} = { %$event };
             if ($copy{$id}{shared_scalars}) {
@@ -135,6 +141,15 @@ sub events {
 # can inspect semaphore state directly.
 sub _events_knot {
     return tied(%events);
+}
+
+# Internal: test-accessors for the shared metadata counters. Coderefs
+# run inside _read_events so they can see the module's lexical %events.
+sub _event_count {
+    return _read_events(sub { $events{_event_count} || 0 });
+}
+sub _next_id {
+    return _read_events(sub { $events{_id_counter} || 0 });
 }
 sub id {
     my ($self, $id) = @_;
@@ -466,6 +481,7 @@ sub DESTROY {
 
     _write_events(sub {
         delete $events{$self->id};
+        $events{_event_count}--;
     });
 }
 sub _end {
@@ -476,7 +492,8 @@ sub _end {
     eval {
         local $SIG{ALRM} = sub { die "alarm\n" };
         alarm(END_LOCK_TIMEOUT);
-        if (! _read_events(sub { scalar keys %events })) {
+        if (! _read_events(sub { $events{_event_count} || 0 })
+            && $creator_pid == $$) {
             IPC::Shareable::clean_up_protected(_shm_lock());
         }
         alarm(0);
