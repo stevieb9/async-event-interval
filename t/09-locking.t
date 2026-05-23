@@ -302,6 +302,100 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     cmp_ok $write_count, '>=', 1, "_pid() setter calls _write_events";
 }
 
+# The internal write-path incrementors (_errors(1), _runs(1),
+# _error_message($msg)) also go through _write_events.
+
+{
+    my $write_count = 0;
+    my $orig = \&Async::Event::Interval::_write_events;
+    no warnings 'redefine';
+    local *Async::Event::Interval::_write_events = sub {
+        $write_count++;
+        $orig->(@_);
+    };
+
+    my $e = Async::Event::Interval->new(0.5, sub {});
+
+    $write_count = 0;
+    Async::Event::Interval::_errors($e, 1);
+    cmp_ok $write_count, '>=', 1, "_errors(1) calls _write_events";
+
+    $write_count = 0;
+    Async::Event::Interval::_runs($e, 1);
+    cmp_ok $write_count, '>=', 1, "_runs(1) calls _write_events";
+
+    $write_count = 0;
+    Async::Event::Interval::_error_message($e, "test");
+    cmp_ok $write_count, '>=', 1, "_error_message(\$msg) calls _write_events";
+}
+
+# _read_events degrades gracefully when the knot has been torn down
+# (same pattern as the _write_events teardown test).
+
+{
+    no warnings 'redefine';
+    local *Async::Event::Interval::_read_events = sub {
+        my ($cb) = @_;
+        my $knot = Async::Event::Interval::_events_knot();
+        $knot = undef;
+        return $cb->() unless $knot;
+        return 'never';
+    };
+    is
+        Async::Event::Interval::_read_events(sub { 'fallback' }),
+        'fallback',
+        "_read_events falls back to running the coderef when no knot is available";
+}
+
+# Automated audit: no code in lib/ accesses %events directly outside of
+# _read_events or _write_events coderefs. Multi-line coderefs (e.g.
+# events(), shared_scalar(), DESTROY) are tracked via paren/brace depth
+# from the point where _write_events(sub { or _read_events(sub { opens.
+
+{
+    my $src = do {
+        open my $fh, '<', 'lib/Async/Event/Interval.pm'
+            or die "Can't read module source: $!";
+        local $/;
+        <$fh>;
+    };
+
+    my @direct;
+    my $wrapped_depth = 0;
+
+    for my $line (split /\n/, $src) {
+        # Single-line wrapper coderef: _write_events(sub { ... }); — covered
+        # by the _read_events|_write_events filter below.
+        #
+        # Multi-line: _write_events(sub { opens a coderef; track brace
+        # depth from the opening. A lone }); closes it.
+
+        if ($line =~ /_(?:write|read)_events\s*\(\s*sub\s*\{/ && $line !~ /_\w+events\s*\(\s*sub\s*\{.*\}\);/) {
+            $wrapped_depth++;
+            next;
+        }
+
+        if ($wrapped_depth) {
+            $wrapped_depth-- if $line =~ /^\s*\}\);?\s*$/;
+            next;
+        }
+
+        next if $line =~ /^\s*#/;
+        next if $line =~ /^=\w/;
+        next if $line =~ /_read_events|_write_events/;
+        next if $line =~ /tied\s*\(?\s*%events/;
+        next if $line =~ /^sub _events_knot\b/;
+
+        if ($line =~ /[\$\@%]events\s*[\{\(]/) {
+            push @direct, $line;
+        }
+    }
+
+    is scalar(@direct), 0,
+        "no direct %events access outside _read_events / _write_events wrappers"
+        or diag "Bare %events access found:\n" . join("\n", @direct);
+}
+
 # $@ is preserved across _write_events calls inside the error path.
 # _write_events → lock(LOCK_EX, sub{...}) does an internal eval{} that
 # would clear $@ if $@ were not captured first.

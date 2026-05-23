@@ -14,13 +14,9 @@ use constant {
     SHM_CREATE_RETRIES => 100,
 };
 
-$SIG{CHLD} = 'IGNORE';
-$SIG{__WARN__} = sub {
-    my $warn = shift;
-    warn $warn if $warn !~ /^child process/;
-};
-
 my $id = 0;
+
+$SIG{CHLD} = 'IGNORE';
 
 my %events;
 my $shared_memory_protect_lock = _rand_shm_lock();
@@ -300,6 +296,11 @@ sub _event {
     my @callback_params = scalar @event_params
         ? @event_params
         : @{ $self->_args };
+
+    local $SIG{__WARN__} = sub {
+        my $warn = shift;
+        warn $warn if $warn !~ /^child process/;
+    };
 
     for (0..1){
         my $pid = $self->_pm->start;

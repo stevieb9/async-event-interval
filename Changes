@@ -31,6 +31,10 @@ Revision history for Async-Event-Interval
     - shared_scalar() no longer stores tied refs inside %events;
       %events now holds an arrayref of hex key strings instead,
       eliminating a same-process FETCH deadlock in IPC::Shareable
+    - $SIG{__WARN__} moved to local inside _event() so it no longer
+      silently replaces the caller's handler at module load; $SIG{CHLD}
+      remains at file scope (children outlive _event(), need auto-reap)
+    - Add write-path tests and automated source audit to t/09-locking.t
     -
 
 1.13    2024-03-04

@@ -55,12 +55,9 @@ END {
 
     return if $$ != $parent_pid;
 
-    # Async::Event::Interval sets $SIG{CHLD} = 'IGNORE' at module load.
-    # When the process exits, Perl / Test2 waitpid for any remaining
-    # children; with CHLD ignored, that waitpid returns -1, $? becomes
-    # -1, and Test2's set_exit propagates it as the test exit code
-    # (255), even when every assertion passed. Restore default CHLD
-    # handling before any code that might reap.
+    # AEI sets $SIG{CHLD} = 'IGNORE' at module load so children are
+    # auto-reaped. Perl/Test2 waitpid returns -1 with CHLD ignored, which
+    # can corrupt the test exit code. Restore DEFAULT before exit.
 
     $SIG{CHLD} = 'DEFAULT';
     $? = 0;
