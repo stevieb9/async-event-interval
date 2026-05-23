@@ -43,6 +43,9 @@ Revision history for Async-Event-Interval
       shared_scalars as a hashref instead of the new arrayref
     - Fix fork failure silently falling through to child path and running
       the callback in the parent process; now croaks with "fork() failed"
+    - Wrap _run_callback in eval inside _event() and always call
+      _pm->finish($@ ? 1 : 0) so ForkManager isn't left with a stale
+      child record when the callback dies
     -
 
 1.13    2024-03-04

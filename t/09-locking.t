@@ -463,6 +463,278 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         "...also visible via info()";
 }
 
+# _pm->finish is called even when the callback dies, so ForkManager
+# gets notified instead of retaining a stale child record.
+# Test in-process by mocking start() to return 0 (child path) and
+# finish() to record calls instead of exiting.
+
+{
+    my $finish_called = 0;
+    my $finish_exit   = undef;
+    my $start_call    = 0;
+
+    my $start_orig  = \&Parallel::ForkManager::start;
+    my $finish_orig = \&Parallel::ForkManager::finish;
+
+    no warnings 'redefine';
+    local *Parallel::ForkManager::start = sub {
+        $start_call++;
+        return 0 if $start_call == 1;   # child path
+        return 1;                        # parent path (breaks loop)
+    };
+    local *Parallel::ForkManager::finish = sub {
+        my ($self, $exit_code) = @_;
+        $finish_called++;
+        $finish_exit = $exit_code;
+    };
+
+    my $e = Async::Event::Interval->new(0, sub { die "child-crash\n" });
+    $e->start;
+
+    is $finish_called, 1,
+        "_pm->finish called even after callback crash";
+    is $finish_exit, 1,
+        "...with exit code 1 on failure";
+
+    is $e->errors, 1,
+        "error count incremented after in-process crash test";
+    like $e->error_message, qr/child-crash/,
+        "error_message preserved";
+}
+
+# Additional 1.2 coverage: _pm->finish must always be called with the
+# correct exit code regardless of how the callback finishes, across both
+# run-once and interval modes. These blocks mock
+# Parallel::ForkManager::start (return 0 for the child path, 1 for the
+# parent path so the for(0..1) loop breaks via `last`) and
+# Parallel::ForkManager::finish (record instead of exiting). _pid(0) at
+# the end suppresses the DESTROY -> stop() -> sleep(1) chain that would
+# otherwise fire on the mocked parent-path pid=1.
+#
+# Run-once success path: callback returns; finish(0); runs=1, errors=0.
+
+{
+    my @finish_calls;
+    my $start_call = 0;
+    no warnings 'redefine';
+    local *Parallel::ForkManager::start = sub {
+        $start_call++;
+        return 0 if $start_call == 1;
+        return 1;
+    };
+    local *Parallel::ForkManager::finish = sub {
+        push @finish_calls, $_[1];
+    };
+
+    my $e = Async::Event::Interval->new(0, sub { 1 });
+    $e->start;
+
+    is scalar @finish_calls, 1,
+        "run-once success: _pm->finish called exactly once";
+    is $finish_calls[0], 0,
+        "...with exit code 0 on success";
+    is $e->runs, 1, "run-once success: runs incremented";
+    is $e->errors, 0, "run-once success: errors stays 0";
+    is $e->error_message, undef,
+        "run-once success: error_message stays undef";
+
+    $e->_pid(0);
+}
+
+# Run-once failure: Carp::croak inside the callback still triggers finish(1).
+# (Carp is loaded transitively via Async::Event::Interval.)
+
+{
+    my @finish_calls;
+    my $start_call = 0;
+    no warnings 'redefine';
+    local *Parallel::ForkManager::start = sub {
+        $start_call++;
+        return 0 if $start_call == 1;
+        return 1;
+    };
+    local *Parallel::ForkManager::finish = sub {
+        push @finish_calls, $_[1];
+    };
+
+    my $e = Async::Event::Interval->new(0, sub { Carp::croak "carp-form" });
+    $e->start;
+
+    is scalar @finish_calls, 1, "Carp::croak: finish called once";
+    is $finish_calls[0], 1, "...with exit code 1";
+    is $e->errors, 1, "Carp::croak: errors == 1";
+    like $e->error_message, qr/carp-form/,
+        "Carp::croak: error_message captured";
+
+    $e->_pid(0);
+}
+
+# Run-once failure: die without a trailing newline (Perl appends file/line)
+# is still caught and finish(1) is invoked with the appended location.
+
+{
+    my @finish_calls;
+    my $start_call = 0;
+    no warnings 'redefine';
+    local *Parallel::ForkManager::start = sub {
+        $start_call++;
+        return 0 if $start_call == 1;
+        return 1;
+    };
+    local *Parallel::ForkManager::finish = sub {
+        push @finish_calls, $_[1];
+    };
+
+    my $e = Async::Event::Interval->new(0, sub { die "no-newline-die" });
+    $e->start;
+
+    is scalar @finish_calls, 1, "die-without-newline: finish called once";
+    is $finish_calls[0], 1, "...with exit code 1";
+    like $e->error_message, qr/no-newline-die/,
+        "die-without-newline: original message captured";
+    like $e->error_message, qr/line \d+/,
+        "...Perl's appended source location preserved";
+
+    $e->_pid(0);
+}
+
+# Interval mode: callback dies on first iteration; the eval around the
+# while(1) loop catches and finish(1) is called once.
+
+{
+    my @finish_calls;
+    my $start_call = 0;
+    my $cb_count   = 0;
+    no warnings 'redefine';
+    local *Parallel::ForkManager::start = sub {
+        $start_call++;
+        return 0 if $start_call == 1;
+        return 1;
+    };
+    local *Parallel::ForkManager::finish = sub {
+        push @finish_calls, $_[1];
+    };
+
+    my $e = Async::Event::Interval->new(
+        0.001,
+        sub { $cb_count++; die "immediate-loop-death\n" },
+    );
+    $e->start;
+
+    is $cb_count, 1, "interval mode (immediate death): callback ran once";
+    is scalar @finish_calls, 1,
+        "interval mode (immediate death): finish called exactly once";
+    is $finish_calls[0], 1, "...with exit code 1";
+    is $e->runs, 1, "runs incremented for the one iteration";
+    is $e->errors, 1, "errors incremented exactly once";
+    like $e->error_message, qr/immediate-loop-death/,
+        "interval mode: error_message captured";
+
+    $e->_pid(0);
+}
+
+# Interval mode: callback succeeds N times then dies; finish(1) called
+# once, runs == N (incremented in both success and failure paths of
+# _run_callback), errors == 1.
+
+{
+    my @finish_calls;
+    my $start_call = 0;
+    my $cb_count   = 0;
+    no warnings 'redefine';
+    local *Parallel::ForkManager::start = sub {
+        $start_call++;
+        return 0 if $start_call == 1;
+        return 1;
+    };
+    local *Parallel::ForkManager::finish = sub {
+        push @finish_calls, $_[1];
+    };
+
+    my $e = Async::Event::Interval->new(0.001, sub {
+        $cb_count++;
+        die "death-after-runs\n" if $cb_count >= 3;
+    });
+    $e->start;
+
+    is $cb_count, 3, "interval mode (death after runs): callback ran 3 times";
+    is scalar @finish_calls, 1,
+        "interval mode (death after runs): finish called exactly once";
+    is $finish_calls[0], 1, "...with exit code 1";
+    is $e->runs, 3, "runs incremented for all iterations including the dying one";
+    is $e->errors, 1, "errors incremented exactly once";
+    like $e->error_message, qr/death-after-runs/,
+        "interval mode (death after runs): error_message captured";
+
+    $e->_pid(0);
+}
+
+# Multiple events crashing independently each receive their own finish(1)
+# call. The mocked start() returns 0 on odd calls (child path) and 1 on
+# even calls (parent path), so each event's for(0..1) loop runs once
+# through the child and once through the parent.
+
+{
+    my @finish_calls;
+    my $start_call = 0;
+    no warnings 'redefine';
+    local *Parallel::ForkManager::start = sub {
+        $start_call++;
+        return $start_call % 2 == 1 ? 0 : 1;
+    };
+    local *Parallel::ForkManager::finish = sub {
+        push @finish_calls, $_[1];
+    };
+
+    my $e1 = Async::Event::Interval->new(0, sub { die "e1-crash\n" });
+    my $e2 = Async::Event::Interval->new(0, sub { die "e2-crash\n" });
+    $e1->start;
+    $e2->start;
+
+    is scalar @finish_calls, 2,
+        "multiple events: each crash invokes _pm->finish";
+    is $finish_calls[0], 1, "first event finish exit code 1";
+    is $finish_calls[1], 1, "second event finish exit code 1";
+    is $e1->errors, 1, "first event errors == 1";
+    is $e2->errors, 1, "second event errors == 1";
+    like $e1->error_message, qr/e1-crash/,
+        "first event error_message captured";
+    like $e2->error_message, qr/e2-crash/,
+        "second event error_message captured";
+
+    $e1->_pid(0);
+    $e2->_pid(0);
+}
+
+# finish() is called exactly once per start, from inside the child-path
+# branch of the for(0..1) loop. The parent-path iteration must not call
+# finish a second time. Recording the start-call counter at finish time
+# proves finish ran before the parent-path iteration.
+
+{
+    my @finish_at;
+    my $start_call = 0;
+    no warnings 'redefine';
+    local *Parallel::ForkManager::start = sub {
+        $start_call++;
+        return 0 if $start_call == 1;
+        return 1;
+    };
+    local *Parallel::ForkManager::finish = sub {
+        push @finish_at, $start_call;
+    };
+
+    my $e = Async::Event::Interval->new(0, sub { 1 });
+    $e->start;
+
+    is scalar @finish_at, 1,
+        "exactly one finish() per start() (parent-path iteration does not call finish)";
+    is $finish_at[0], 1,
+        "finish() ran from the child path, before the parent-path start iteration";
+
+    $e->_pid(0);
+}
+
 # _end() uses _read_events rather than reading %events directly.
 
 {

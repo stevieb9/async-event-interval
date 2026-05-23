@@ -320,16 +320,18 @@ sub _event {
         # if no interval, run only once
 
         if ($self->interval) {
-            while (1) {
-                select(undef, undef, undef, $self->interval);
-                $self->_run_callback(@callback_params);
-            }
+            eval {
+                while (1) {
+                    select(undef, undef, undef, $self->interval);
+                    $self->_run_callback(@callback_params);
+                }
+            };
+            $self->_pm->finish($@ ? 1 : 0);
         }
         else {
-            $self->_run_callback(@callback_params);
+            eval { $self->_run_callback(@callback_params) };
+            $self->_pm->finish($@ ? 1 : 0);
         }
-
-        $self->_pm->finish;
     }
 }
 sub _run_callback {
