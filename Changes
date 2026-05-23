@@ -17,6 +17,9 @@ Revision history for Async-Event-Interval
       close the IPC::Shareable->clean_up_all foot-gun that could wipe them
       out from under a running event; the owning event's DESTROY still
       removes them via IPC::Shareable->remove
+    - %events bootstrap loop is now capped at SHM_CREATE_RETRIES (100)
+      attempts and croaks with the last underlying error instead of
+      spinning forever when shmget fails persistently
     -
 
 1.13    2024-03-04

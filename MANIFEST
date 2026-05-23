@@ -8,6 +8,7 @@ t/00-load.t
 t/05-base.t
 t/06-destroy.t
 t/07-shm_lock.t
+t/08-bootstrap_retry.t
 t/10-shared.t
 t/11-dup_shm_key.t
 t/12-ipc_shareable.t

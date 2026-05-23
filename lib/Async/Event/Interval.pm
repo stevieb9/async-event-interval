@@ -11,6 +11,7 @@ use IPC::Shareable;
 use Parallel::ForkManager;
 
 use constant {
+    SHM_CREATE_RETRIES => 100,
 };
 
 $SIG{CHLD} = 'IGNORE';
@@ -24,20 +25,34 @@ my $id = 0;
 my %events;
 my $shared_memory_protect_lock = _rand_shm_lock();
 
-my $shared_memory_segment_created;
+_create_events_seg();
 
-while (! $shared_memory_segment_created) {
-    $shared_memory_segment_created = eval {
-        tie %events, 'IPC::Shareable', {
-            key         => _rand_shm_key(),
-            create      => 1,
-            exclusive   => 1,
-            protected   => _shm_lock(),
-            mode        => 0600,
-            destroy     => 1
+sub _create_events_seg {
+    my $created;
+    my $tries = 0;
+
+    while (! $created) {
+        if ($tries++ >= SHM_CREATE_RETRIES) {
+            croak
+                "Unable to create the %events shared memory segment after "
+              . SHM_CREATE_RETRIES
+              . " attempts: $@";
+        }
+
+        $created = eval {
+            tie %events, 'IPC::Shareable', {
+                key         => _rand_shm_key(),
+                create      => 1,
+                exclusive   => 1,
+                protected   => _shm_lock(),
+                mode        => 0600,
+                destroy     => 1
+            };
+            1;
         };
-        1;
-    };
+    }
+
+    return $created;
 }
 
 *restart = \&start;
