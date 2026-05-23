@@ -11,8 +11,10 @@ use IPC::Shareable qw(:lock);
 use Parallel::ForkManager;
 
 use constant {
-    SHM_CREATE_RETRIES => 100,
-    END_LOCK_TIMEOUT   => 2,
+    SHM_CREATE_RETRIES      => 100,
+    END_LOCK_TIMEOUT        => 2,
+    STOP_KILL_TIMEOUT       => 1,
+    STOP_KILL_POLL_INTERVAL => 0.05,
 };
 
 my $id = 0;
@@ -242,13 +244,18 @@ sub stop {
 
         $self->_started(0);
 
-        # time to ensure the proc was killed
+        # Poll for up to STOP_KILL_TIMEOUT seconds so we return as soon
+        # as the process is gone, instead of always sleeping the full
+        # timeout. STOP_KILL_POLL_INTERVAL is the polling cadence.
 
-        sleep 1;
-
-        if (kill 0, $self->pid){
-            croak "Event stop was called, but the process hasn't been killed. " .
-                  "This is a fatal event. Exiting...\n";
+        my $waited = 0;
+        while (kill 0, $self->pid) {
+            if ($waited >= STOP_KILL_TIMEOUT) {
+                croak "Event stop was called, but the process hasn't been killed. " .
+                      "This is a fatal event. Exiting...\n";
+            }
+            select(undef, undef, undef, STOP_KILL_POLL_INTERVAL);
+            $waited += STOP_KILL_POLL_INTERVAL;
         }
     }
 }

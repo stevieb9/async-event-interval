@@ -6,6 +6,21 @@ use TestHelper;
 use IPC::Shareable qw(:lock :semaphores);
 use Test::More;
 
+# Test hook used by the 2.2 stop() polling-loop tests. When $kill_mock
+# is set to a coderef, all kill() calls in code compiled AFTER this
+# BEGIN (notably Async::Event::Interval, loaded just below) route
+# through the mock; otherwise pass through to the real CORE::kill. Lets
+# us exercise stop()'s "process never dies" croak path without needing
+# an actually-unkillable real process.
+
+our $kill_mock;
+BEGIN {
+    *CORE::GLOBAL::kill = sub {
+        return $kill_mock->(@_) if $kill_mock;
+        return CORE::kill(@_);
+    };
+}
+
 use Async::Event::Interval;
 
 # Helper: get the knot for AEI's %events hash so we can poke at the
@@ -944,4 +959,154 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     # pending alarm, so a clean state returns 0.
     is alarm(0), 0,
         "_end() leaves no pending alarm in the global state";
+}
+
+# 2.2: stop() polls kill(0) at STOP_KILL_POLL_INTERVAL cadence for up to
+# STOP_KILL_TIMEOUT seconds instead of always sleeping a fixed 1s. It
+# returns as soon as the target process is gone, and croaks only if the
+# process is still alive after the timeout.
+
+# Constants exist and have sane values; poll interval < total timeout.
+
+{
+    can_ok 'Async::Event::Interval', 'STOP_KILL_TIMEOUT';
+    can_ok 'Async::Event::Interval', 'STOP_KILL_POLL_INTERVAL';
+    cmp_ok Async::Event::Interval::STOP_KILL_TIMEOUT(), '>', 0,
+        "STOP_KILL_TIMEOUT is positive";
+    cmp_ok Async::Event::Interval::STOP_KILL_POLL_INTERVAL(), '>', 0,
+        "STOP_KILL_POLL_INTERVAL is positive";
+    cmp_ok Async::Event::Interval::STOP_KILL_POLL_INTERVAL(), '<',
+        Async::Event::Interval::STOP_KILL_TIMEOUT(),
+        "poll interval is smaller than the total timeout";
+}
+
+# Already-dead pid: stop() returns essentially immediately because the
+# first `kill 0` returns 0 and the while-loop body never executes.
+
+{
+    my $pid = fork;
+    die "fork: $!" unless defined $pid;
+    if (! $pid) {
+        require POSIX;
+        POSIX::_exit(0);
+    }
+    # $SIG{CHLD} = 'IGNORE' (set by AEI at load time) auto-reaps; sleep
+    # briefly so the child has actually exited.
+    select(undef, undef, undef, 0.05);
+
+    my $e = Async::Event::Interval->new(0, sub {});
+    $e->_pid($pid);
+
+    use Time::HiRes ();
+    my $t0 = Time::HiRes::time();
+    $e->stop;
+    my $elapsed = Time::HiRes::time() - $t0;
+
+    cmp_ok $elapsed, '<',
+        Async::Event::Interval::STOP_KILL_POLL_INTERVAL(),
+        "stop() on an already-dead pid returns under one poll interval "
+      . "($elapsed s)";
+    is $e->_started, 0,
+        "stop() cleared _started flag";
+
+    $e->_pid(0);
+}
+
+# Live child: stop() actually sends SIGKILL and returns well under the
+# old fixed 1s sleep — the polling loop catches the child's death on
+# the first or second poll.
+
+{
+    my $pid = fork;
+    die "fork: $!" unless defined $pid;
+    if (! $pid) {
+        sleep 30;   # parent's stop() will SIGKILL us long before this
+        require POSIX;
+        POSIX::_exit(0);
+    }
+
+    my $e = Async::Event::Interval->new(0, sub {});
+    $e->_pid($pid);
+    $e->_started(1);
+
+    # Brief settle so the child is in its sleep before we kill it.
+    select(undef, undef, undef, 0.05);
+
+    use Time::HiRes ();
+    my $t0 = Time::HiRes::time();
+    $e->stop;
+    my $elapsed = Time::HiRes::time() - $t0;
+
+    cmp_ok $elapsed, '<',
+        Async::Event::Interval::STOP_KILL_TIMEOUT(),
+        "stop() on a live child returns under STOP_KILL_TIMEOUT "
+      . "($elapsed s)";
+    is $e->_started, 0,
+        "stop() on a live child cleared _started flag";
+    ok ! (kill 0, $pid),
+        "child pid is gone after stop()";
+
+    $e->_pid(0);
+}
+
+# Croak path: when kill(0) keeps returning truthy past STOP_KILL_TIMEOUT,
+# stop() croaks instead of looping forever. Uses the CORE::GLOBAL::kill
+# override installed at the top of this file so we don't need an
+# actually-unkillable real process.
+
+{
+    my @kill_zero_calls;
+    local $kill_mock = sub {
+        my ($sig, @pids) = @_;
+        push @kill_zero_calls, [@pids] if $sig eq '0';
+        return 1;
+    };
+
+    my $e = Async::Event::Interval->new(0, sub {});
+    $e->_pid(99999);
+
+    my $timeout = Async::Event::Interval::STOP_KILL_TIMEOUT();
+
+    use Time::HiRes ();
+    my $t0 = Time::HiRes::time();
+    eval { $e->stop };
+    my $err = $@;
+    my $elapsed = Time::HiRes::time() - $t0;
+
+    like $err, qr/hasn't been killed/,
+        "stop() croaks when kill 0 keeps returning truthy";
+    cmp_ok $elapsed, '>=', $timeout - 0.2,
+        "stop() waited ~STOP_KILL_TIMEOUT before croaking "
+      . "($elapsed s, timeout=$timeout)";
+    cmp_ok $elapsed, '<', $timeout + 0.5,
+        "stop() didn't wait substantially longer than STOP_KILL_TIMEOUT "
+      . "($elapsed s)";
+
+    # Polling actually polled: at STOP_KILL_POLL_INTERVAL=0.05 over
+    # ~1s we expect ~20 kill(0) checks. Allow a generous floor.
+    cmp_ok scalar @kill_zero_calls, '>=', 5,
+        "stop() polled kill(0) multiple times (got "
+      . scalar(@kill_zero_calls) . ")";
+
+    is $e->_started, 0,
+        "stop() cleared _started flag even before croaking";
+
+    $e->_pid(0);
+}
+
+# stop() with no pid is a no-op (covers the early `if ($self->pid)`
+# guard so the polling loop doesn't run on a fresh, never-started event).
+
+{
+    my $e = Async::Event::Interval->new(0, sub {});
+    # new() does not call _pid, so $e->pid is undef at this point.
+    is $e->pid, undef, "fresh event has no pid before start()";
+
+    use Time::HiRes ();
+    my $t0 = Time::HiRes::time();
+    $e->stop;
+    my $elapsed = Time::HiRes::time() - $t0;
+
+    cmp_ok $elapsed, '<', 0.01,
+        "stop() on a never-started event is an instant no-op ($elapsed s)";
 }
