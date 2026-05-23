@@ -839,3 +839,109 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     is $cleanup_calls, 1,
         "_end() calls clean_up_protected when %events is empty";
 }
+
+# 2.1: _end() must not block forever if another process holds LOCK_EX
+# on the events knot at exit time. The body is wrapped in
+# eval { local $SIG{ALRM} = ...; alarm(END_LOCK_TIMEOUT); ... }, so the
+# alarm interrupts _read_events' blocking semop and the parent exits.
+
+# Constant is exported via use constant and has a sane value.
+
+{
+    can_ok 'Async::Event::Interval', 'END_LOCK_TIMEOUT';
+    cmp_ok Async::Event::Interval::END_LOCK_TIMEOUT(), '>=', 1,
+        "END_LOCK_TIMEOUT >= 1 second";
+    cmp_ok Async::Event::Interval::END_LOCK_TIMEOUT(), '<=', 10,
+        "END_LOCK_TIMEOUT <= 10 seconds (sanity bound)";
+}
+
+# No-contention path: _end() returns essentially immediately, well under
+# the alarm timeout, when no peer holds LOCK_EX.
+
+{
+    no warnings 'redefine';
+    local *IPC::Shareable::clean_up_protected = sub {};
+
+    use Time::HiRes ();
+    my $t0 = Time::HiRes::time();
+    Async::Event::Interval::_end();
+    my $elapsed = Time::HiRes::time() - $t0;
+
+    my $timeout = Async::Event::Interval::END_LOCK_TIMEOUT();
+    cmp_ok $elapsed, '<', $timeout,
+        "_end() returns well under END_LOCK_TIMEOUT when no contention "
+      . "($elapsed s, timeout=$timeout)";
+}
+
+# Contention path: a forked child takes LOCK_EX and holds it longer than
+# END_LOCK_TIMEOUT. _end() in the parent must time out via SIGALRM
+# instead of blocking on _read_events' LOCK_SH wait forever.
+
+{
+    my $knot = events_knot;
+
+    pipe my $ready_r, my $ready_w or die "pipe: $!";
+
+    my $pid = fork;
+    die "fork: $!" unless defined $pid;
+    if (! $pid) {
+        $knot->lock(LOCK_EX);
+        close $ready_r;
+        print $ready_w "ready\n";
+        close $ready_w;
+        # Hold the lock well past END_LOCK_TIMEOUT; parent TERMs us when
+        # done.
+        sleep 30;
+        $knot->unlock;
+        require POSIX;
+        POSIX::_exit(0);
+    }
+
+    close $ready_w;
+    my $ready = <$ready_r>;
+    chomp $ready;
+    is $ready, 'ready', "_end timeout: child holds LOCK_EX";
+    close $ready_r;
+
+    is $knot->sem->getval(SEM_WRITERS), 1,
+        "_end timeout: SEM_WRITERS confirms the child's LOCK_EX is held";
+
+    no warnings 'redefine';
+    local *IPC::Shareable::clean_up_protected = sub {};
+
+    my $timeout = Async::Event::Interval::END_LOCK_TIMEOUT();
+
+    use Time::HiRes ();
+    my $t0 = Time::HiRes::time();
+    Async::Event::Interval::_end();
+    my $elapsed = Time::HiRes::time() - $t0;
+
+    cmp_ok $elapsed, '<', $timeout + 1.5,
+        "_end() bailed out near END_LOCK_TIMEOUT instead of blocking "
+      . "($elapsed s, timeout=$timeout)";
+    cmp_ok $elapsed, '>=', $timeout - 0.5,
+        "_end() actually waited ~END_LOCK_TIMEOUT seconds before bailing "
+      . "($elapsed s)";
+
+    kill 'TERM', $pid;
+    waitpid $pid, 0;
+}
+
+# After a timeout-aborted _end(), the next _end() call (with no
+# contention) still works — the eval / local $SIG{ALRM} pair leaves no
+# leaked alarm or handler state behind.
+
+{
+    no warnings 'redefine';
+    my $cleanup_calls = 0;
+    local *IPC::Shareable::clean_up_protected = sub { $cleanup_calls++ };
+
+    Async::Event::Interval::_end();
+    cmp_ok $cleanup_calls, '>=', 1,
+        "_end() recovers normally after a prior timeout";
+
+    # No leaked alarm — alarm(0) returns the seconds remaining on any
+    # pending alarm, so a clean state returns 0.
+    is alarm(0), 0,
+        "_end() leaves no pending alarm in the global state";
+}

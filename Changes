@@ -46,6 +46,9 @@ Revision history for Async-Event-Interval
     - Wrap _run_callback in eval inside _event() and always call
       _pm->finish($@ ? 1 : 0) so ForkManager isn't left with a stale
       child record when the callback dies
+    - Guard _end() with a local SIGALRM (END_LOCK_TIMEOUT, default 2s)
+      so process exit doesn't block forever on _read_events' LOCK_SH if
+      a peer still holds LOCK_EX on the events knot
     -
 
 1.13    2024-03-04

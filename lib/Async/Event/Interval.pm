@@ -12,6 +12,7 @@ use Parallel::ForkManager;
 
 use constant {
     SHM_CREATE_RETRIES => 100,
+    END_LOCK_TIMEOUT   => 2,
 };
 
 my $id = 0;
@@ -435,9 +436,18 @@ sub DESTROY {
     });
 }
 sub _end {
-    if (! _read_events(sub { scalar keys %events })) {
-        IPC::Shareable::clean_up_protected(_shm_lock());
-    }
+    # Guard against deadlocking forever on _read_events' LOCK_SH if a
+    # crashed/stuck peer still holds LOCK_EX on the events knot. Bail
+    # out after END_LOCK_TIMEOUT seconds and let the process exit.
+
+    eval {
+        local $SIG{ALRM} = sub { die "alarm\n" };
+        alarm(END_LOCK_TIMEOUT);
+        if (! _read_events(sub { scalar keys %events })) {
+            IPC::Shareable::clean_up_protected(_shm_lock());
+        }
+        alarm(0);
+    };
 }
 END {
     _end();
