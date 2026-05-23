@@ -10,6 +10,9 @@ use Data::Dumper;
 use IPC::Shareable;
 use Parallel::ForkManager;
 
+use constant {
+};
+
 $SIG{CHLD} = 'IGNORE';
 $SIG{__WARN__} = sub {
     my $warn = shift;
@@ -332,6 +335,19 @@ sub DESTROY {
 
     return if (caller())[0] eq 'Parallel::ForkManager::Child';
 
+    # Release any shared_scalar segments owned by this event before we
+    # drop the %events entry that tracks them. The segments are tied
+    # independently of %events (they are not _magic_tie children), so
+    # they need explicit removal.
+
+    if (my $scalars = $events{$_[0]->id}{shared_scalars}) {
+        for my $scalar_ref (values %$scalars) {
+            next unless ref $scalar_ref eq 'SCALAR';
+            my $knot = tied $$scalar_ref;
+            eval { $knot->remove } if $knot;
+        }
+    }
+
     delete $events{$_[0]->id};
 }
 sub _end {
@@ -490,6 +506,14 @@ multiple shared scalars can be created by each event.
 
 To read from or assign to the returned scalar, you must dereference it. Eg.
 C<$$shared_scalar = 1;>.
+
+B<Lifetime>: The underlying shared memory segment is owned by the event
+object that created it. When the event goes out of scope (and its
+C<DESTROY> runs), every C<shared_scalar> it created is released. Do not
+dereference the returned scalar reference after the owning event has been
+destroyed; the segment will no longer exist. If you need a shared scalar
+whose lifetime is independent of any event, tie it directly with
+L<IPC::Shareable>.
 
 =head1 METHODS - EVENT INFORMATION
 

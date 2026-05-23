@@ -3,7 +3,14 @@ Revision history for Async-Event-Interval
 1.14 UNREL
     - Add $count++ in callback exec params example in POD
     - s/contains any/doesn't contain/ in Changes entry 1.12
+    - Remove all reliance on CI_TESTING env var in unit tests. They all run on
+      all systems by default
     - Bump IPC::Shareable prereq to 1.14
+    - Add t/lib/TestHelper.pm; automatically does the seg/sem tests in all test
+      files that "use" it to ensure there are no leaks
+    - Test updates to conform with updates to IPC::Shareable
+    - Make shared_scalar() a property of the event that created it. Clarify its
+      cleanup in POD
     -
 
 1.13    2024-03-04

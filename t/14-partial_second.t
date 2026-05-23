@@ -25,7 +25,7 @@ my $e = $mod->new(1.6, \&perform);
 my $t = $e->shared_scalar;
 $$t = time;
 $e->start;
-entsleep 2;
+sleep 2;
 $e->stop;
 
 sub perform {

@@ -1,20 +1,12 @@
 use strict;
 use warnings;
 
-use IPC::Shareable;
+use lib 't/lib';
+use TestHelper;
 use Test::More;
 use Time::HiRes qw(usleep);
 
-my ($segs_before, $sems_before);
-BEGIN {
-    $segs_before = IPC::Shareable::seg_count();
-    $sems_before = IPC::Shareable::sem_count();
-}
-
 use Async::Event::Interval;
-
-warn "Segs Before: $segs_before\n" if $ENV{PRINT_SEGS};
-warn "Sems Before: $sems_before\n" if $ENV{PRINT_SEGS};
 
 my $mod = 'Async::Event::Interval';
 
@@ -51,16 +43,3 @@ sub perform {
     print $wfh $arg;
     close $wfh;
 }
-
-Async::Event::Interval::_end();
-IPC::Shareable::_end;
-
-my $segs_after = IPC::Shareable::seg_count();
-my $sems_after = IPC::Shareable::sem_count();
-warn "Segs After: $segs_after\n" if $ENV{PRINT_SEGS};
-warn "Sems After: $sems_after\n" if $ENV{PRINT_SEGS};
-
-is $segs_after, $segs_before, "All segs cleaned up ok";
-is $sems_after, $sems_before, "All semaphore sets cleaned up ok";
-
-done_testing();

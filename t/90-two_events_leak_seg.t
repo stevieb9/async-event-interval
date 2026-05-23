@@ -72,10 +72,16 @@ warn "Sems Before: $sems_begin\n" if $ENV{PRINT_SEGS};
 
 my $segs_destroy = IPC::Shareable::seg_count();
 
+# IPC::Shareable 1.14 added _remove_child() which is invoked by STORE,
+# DELETE, and CLEAR. When AEI's DESTROY does `delete $events{$id}` for
+# each event going out of scope, the per-event child segment is now
+# proactively removed (it used to leak). Only the protected %events
+# parent remains here.
+
 is
     $segs_destroy,
-    $segs_begin + 3,
-    "All %event segs cleaned up after Async::Event::Interval DESTROY";
+    $segs_begin + 1,
+    "Per-event child segs are removed when each event DESTROYs; only the protected %event parent remains";
 
 Async::Event::Interval::_end;
 IPC::Shareable::_end;
