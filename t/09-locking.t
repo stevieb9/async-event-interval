@@ -1049,15 +1049,18 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     $e->_pid(0);
 }
 
-# Croak path: when kill(0) keeps returning truthy past STOP_KILL_TIMEOUT,
-# stop() croaks instead of looping forever. Uses the CORE::GLOBAL::kill
+# Croak path: when kill(0) keeps returning truthy past both
+# STOP_TERM_TIMEOUT and STOP_KILL_TIMEOUT, stop() croaks after trying
+# SIGTERM then escalating to SIGKILL. Uses the CORE::GLOBAL::kill
 # override installed at the top of this file so we don't need an
 # actually-unkillable real process.
 
 {
+    my @kill_calls;       # track all kill calls: [$sig, $pid]
     my @kill_zero_calls;
     local $kill_mock = sub {
         my ($sig, @pids) = @_;
+        push @kill_calls, [$sig, @pids];
         push @kill_zero_calls, [@pids] if $sig eq '0';
         return 1;
     };
@@ -1065,7 +1068,9 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     my $e = Async::Event::Interval->new(0, sub {});
     $e->_pid(99999);
 
-    my $timeout = Async::Event::Interval::STOP_KILL_TIMEOUT();
+    my $term_timeout = Async::Event::Interval::STOP_TERM_TIMEOUT();
+    my $kill_timeout = Async::Event::Interval::STOP_KILL_TIMEOUT();
+    my $total_timeout = $term_timeout + $kill_timeout;
 
     use Time::HiRes ();
     my $t0 = Time::HiRes::time();
@@ -1074,18 +1079,37 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     my $elapsed = Time::HiRes::time() - $t0;
 
     like $err, qr/hasn't been killed/,
-        "stop() croaks when kill 0 keeps returning truthy";
-    cmp_ok $elapsed, '>=', $timeout - 0.2,
-        "stop() waited ~STOP_KILL_TIMEOUT before croaking "
-      . "($elapsed s, timeout=$timeout)";
-    cmp_ok $elapsed, '<', $timeout + 0.5,
-        "stop() didn't wait substantially longer than STOP_KILL_TIMEOUT "
+        "stop() croaks when kill 0 keeps returning truthy after both signals";
+    like $err, qr/SIGTERM \+ SIGKILL/,
+        "...error mentions both SIGTERM and SIGKILL";
+    cmp_ok $elapsed, '>=', $total_timeout - 0.3,
+        "stop() waited ~STOP_TERM_TIMEOUT + STOP_KILL_TIMEOUT before croaking "
+      . "($elapsed s, total_timeout=$total_timeout)";
+    cmp_ok $elapsed, '<', $total_timeout + 0.5,
+        "stop() didn't wait substantially longer than the combined timeouts "
       . "($elapsed s)";
 
+    # Both TERM and KILL were sent in order before croaking.
+    my @sigs = map { $_->[0] } @kill_calls;
+    ok ((grep { $_ eq 'TERM' } @sigs) >= 1,
+        "SIGTERM was sent before croaking");
+    ok ((grep { $_ eq 'KILL' } @sigs) >= 1,
+        "SIGKILL was sent after SIGTERM failed");
+
+    # TERM was sent before KILL.
+    my $term_idx = 0;
+    my $kill_idx = 0;
+    for my $i (0 .. $#kill_calls) {
+        $term_idx = $i if $kill_calls[$i][0] eq 'TERM' && !$term_idx;
+        $kill_idx = $i if $kill_calls[$i][0] eq 'KILL';
+    }
+    cmp_ok $term_idx, '<', $kill_idx,
+        "SIGTERM was sent (idx=$term_idx) before SIGKILL (idx=$kill_idx)";
+
     # Polling actually polled: at STOP_KILL_POLL_INTERVAL=0.05 over
-    # ~1s we expect ~20 kill(0) checks. Allow a generous floor.
-    cmp_ok scalar @kill_zero_calls, '>=', 5,
-        "stop() polled kill(0) multiple times (got "
+    # ~1.5s we expect ~30 kill(0) checks. Allow a generous floor.
+    cmp_ok scalar @kill_zero_calls, '>=', 10,
+        "stop() polled kill(0) across both signal phases (got "
       . scalar(@kill_zero_calls) . ")";
 
     is $e->_started, 0,
@@ -1109,4 +1133,201 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 
     cmp_ok $elapsed, '<', 0.01,
         "stop() on a never-started event is an instant no-op ($elapsed s)";
+}
+
+# 3.3: stop() sends SIGTERM first, escalates to SIGKILL only if TERM fails.
+# Tests verify the new STOP_TERM_TIMEOUT constant, the _signal_and_wait
+# helper, the TERM-then-KILL ordering, and the short-circuit when TERM
+# succeeds.
+
+# STOP_TERM_TIMEOUT exists and has a sane value.
+
+{
+    can_ok 'Async::Event::Interval', 'STOP_TERM_TIMEOUT';
+    cmp_ok Async::Event::Interval::STOP_TERM_TIMEOUT(), '>', 0,
+        "STOP_TERM_TIMEOUT is positive";
+    cmp_ok Async::Event::Interval::STOP_TERM_TIMEOUT(), '<=', 5,
+        "STOP_TERM_TIMEOUT <= 5 seconds (sanity bound)";
+    cmp_ok Async::Event::Interval::STOP_TERM_TIMEOUT(), '<',
+        Async::Event::Interval::STOP_KILL_TIMEOUT(),
+        "STOP_TERM_TIMEOUT is shorter than STOP_KILL_TIMEOUT";
+}
+
+# _signal_and_wait is a method on Async::Event::Interval.
+
+{
+    can_ok 'Async::Event::Interval', '_signal_and_wait';
+}
+
+# SIGTERM success: when a child dies from SIGTERM, stop() returns
+# without ever escalating to SIGKILL. Uses the CORE::GLOBAL::kill mock
+# to track signal order and simulate TERM-induced death.
+
+{
+    my @signals_sent;
+    my $kill_zero_alive = 0;       # count of kill(0) calls seen so far
+    local $kill_mock = sub {
+        my ($sig, @pids) = @_;
+        push @signals_sent, $sig;
+
+        if ($sig eq 'TERM') {
+            # After SIGTERM is delivered, subsequent kill(0) calls
+            # should report the process as dead.
+            $kill_zero_alive = 0;
+            return 1;
+        }
+        if ($sig eq '0') {
+            $kill_zero_alive++;
+            # Return alive for the first kill(0) (pre-TERM probe in
+            # _signal_and_wait's while loop), then dead afterwards
+            # (simulating TERM-induced death).
+            return $kill_zero_alive <= 1 ? 1 : 0;
+        }
+        return 1;
+    };
+
+    my $e = Async::Event::Interval->new(0, sub {});
+    $e->_pid(99999);
+
+    eval { $e->stop };
+
+    # stop() must have sent TERM (it always tries TERM first).
+    ok ((grep { $_ eq 'TERM' } @signals_sent) >= 1,
+        "SIGTERM success: SIGTERM was sent");
+
+    # SIGKILL must NOT have been sent — TERM killed the child.
+    ok (! (grep { $_ eq 'KILL' } @signals_sent),
+        "SIGTERM success: SIGKILL was NOT sent (TERM sufficed)");
+
+    is $e->_started, 0,
+        "SIGTERM success: _started cleared";
+
+    $e->_pid(0);
+}
+
+# Live child actually dies from SIGTERM: fork a child that sleeps,
+# call stop(), verify it returns quickly (under STOP_TERM_TIMEOUT) and
+# the child is gone. SIGTERM's default action (terminate) kills the
+# sleeping child on the first poll.
+
+{
+    my $pid = fork;
+    die "fork: $!" unless defined $pid;
+    if (! $pid) {
+        sleep 30;
+        require POSIX;
+        POSIX::_exit(0);
+    }
+
+    my $e = Async::Event::Interval->new(0, sub {});
+    $e->_pid($pid);
+    $e->_started(1);
+
+    select(undef, undef, undef, 0.05);
+
+    use Time::HiRes ();
+    my $t0 = Time::HiRes::time();
+    $e->stop;
+    my $elapsed = Time::HiRes::time() - $t0;
+
+    my $term_timeout = Async::Event::Interval::STOP_TERM_TIMEOUT();
+    cmp_ok $elapsed, '<', $term_timeout,
+        "live child: stop() returns under STOP_TERM_TIMEOUT when SIGTERM works "
+      . "($elapsed s, term_timeout=$term_timeout)";
+    is $e->_started, 0,
+        "live child: _started cleared";
+    ok ! (kill 0, $pid),
+        "live child: pid is gone after stop()";
+
+    $e->_pid(0);
+}
+
+# _signal_and_wait with an already-dead pid: returns 1 immediately
+# because the kill(0) polling loop never enters.
+
+{
+    my $pid = fork;
+    die "fork: $!" unless defined $pid;
+    if (! $pid) {
+        require POSIX;
+        POSIX::_exit(0);
+    }
+    select(undef, undef, undef, 0.05);
+
+    my $e = Async::Event::Interval->new(0, sub {});
+
+    use Time::HiRes ();
+    my $t0 = Time::HiRes::time();
+    my $rv = $e->_signal_and_wait('TERM',
+        Async::Event::Interval::STOP_TERM_TIMEOUT());
+    my $elapsed = Time::HiRes::time() - $t0;
+
+    is $rv, 1,
+        "_signal_and_wait returns 1 when pid is already dead";
+    cmp_ok $elapsed, '<',
+        Async::Event::Interval::STOP_KILL_POLL_INTERVAL(),
+        "_signal_and_wait returns immediately for already-dead pid "
+      . "($elapsed s)";
+}
+
+# _signal_and_wait with a live child: sends the signal, polls until
+# the child dies, returns 1 within one poll interval.
+
+{
+    my $pid = fork;
+    die "fork: $!" unless defined $pid;
+    if (! $pid) {
+        sleep 30;
+        require POSIX;
+        POSIX::_exit(0);
+    }
+
+    select(undef, undef, undef, 0.05);
+
+    my $e = Async::Event::Interval->new(0, sub {});
+
+    use Time::HiRes ();
+    my $t0 = Time::HiRes::time();
+    my $rv = $e->_signal_and_wait('TERM',
+        Async::Event::Interval::STOP_TERM_TIMEOUT());
+    my $elapsed = Time::HiRes::time() - $t0;
+
+    is $rv, 1,
+        "_signal_and_wait returns 1 when child dies from signal";
+    cmp_ok $elapsed, '<',
+        Async::Event::Interval::STOP_TERM_TIMEOUT(),
+        "_signal_and_wait returns within STOP_TERM_TIMEOUT "
+      . "($elapsed s)";
+    ok ! (kill 0, $pid),
+        "_signal_and_wait: child pid is gone";
+}
+
+# _signal_and_wait timeout: when kill(0) keeps returning truthy past
+# the timeout, returns 0 (used by stop() to decide escalation).
+
+{
+    my @kill_calls;
+    local $kill_mock = sub {
+        my ($sig, @pids) = @_;
+        push @kill_calls, $sig;
+        return 1;   # always alive
+    };
+
+    my $e = Async::Event::Interval->new(0, sub {});
+    $e->_pid(99999);
+
+    use Time::HiRes ();
+    my $t0 = Time::HiRes::time();
+    my $rv = $e->_signal_and_wait('TERM',
+        Async::Event::Interval::STOP_TERM_TIMEOUT());
+    my $elapsed = Time::HiRes::time() - $t0;
+
+    is $rv, 0,
+        "_signal_and_wait returns 0 on timeout";
+    my $term_timeout = Async::Event::Interval::STOP_TERM_TIMEOUT();
+    cmp_ok $elapsed, '>=', $term_timeout - 0.2,
+        "_signal_and_wait waited ~STOP_TERM_TIMEOUT before returning 0 "
+      . "($elapsed s)";
+
+    $e->_pid(0);
 }

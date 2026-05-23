@@ -13,6 +13,7 @@ use Parallel::ForkManager;
 use constant {
     SHM_CREATE_RETRIES      => 100,
     END_LOCK_TIMEOUT        => 2,
+    STOP_TERM_TIMEOUT       => 0.5,
     STOP_KILL_TIMEOUT       => 1,
     STOP_KILL_POLL_INTERVAL => 0.05,
 };
@@ -233,26 +234,23 @@ sub stop {
     my $self = shift;
 
     return if $self->_crashed;
+    return unless $self->pid;
 
-    if ($self->pid){
-        kill 9, $self->pid;
+    $self->_started(0);
 
-        $self->_started(0);
+    # Try graceful SIGTERM first so a user-installed SIGTERM handler in
+    # the callback can do cleanup (close files, release locks, etc.).
+    # Escalate to SIGKILL if the child is still alive after
+    # STOP_TERM_TIMEOUT. _signal_and_wait polls at
+    # STOP_KILL_POLL_INTERVAL and returns 1 as soon as the process is
+    # gone, so the common case is a single poll.
 
-        # Poll for up to STOP_KILL_TIMEOUT seconds so we return as soon
-        # as the process is gone, instead of always sleeping the full
-        # timeout. STOP_KILL_POLL_INTERVAL is the polling cadence.
+    return if $self->_signal_and_wait('TERM', STOP_TERM_TIMEOUT);
+    return if $self->_signal_and_wait('KILL', STOP_KILL_TIMEOUT);
 
-        my $waited = 0;
-        while (kill 0, $self->pid) {
-            if ($waited >= STOP_KILL_TIMEOUT) {
-                croak "Event stop was called, but the process hasn't been killed. " .
-                      "This is a fatal event. Exiting...\n";
-            }
-            select(undef, undef, undef, STOP_KILL_POLL_INTERVAL);
-            $waited += STOP_KILL_POLL_INTERVAL;
-        }
-    }
+    croak "Event stop was called, but the process hasn't been killed " .
+          "(SIGTERM + SIGKILL both ignored). This is a fatal event. " .
+          "Exiting...\n";
 }
 sub waiting {
     my ($self) = @_;
@@ -421,6 +419,20 @@ sub _setup {
 }
 sub _shm_lock {
     return $shared_memory_protect_lock;
+}
+sub _signal_and_wait {
+    my ($self, $sig, $timeout) = @_;
+
+    kill $sig, $self->pid;
+
+    my $waited = 0;
+    while (kill 0, $self->pid) {
+        return 0 if $waited >= $timeout;
+        select(undef, undef, undef, STOP_KILL_POLL_INTERVAL);
+        $waited += STOP_KILL_POLL_INTERVAL;
+    }
+
+    return 1;
 }
 sub _started {
     my ($self, $started) = @_;
