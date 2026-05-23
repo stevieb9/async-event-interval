@@ -53,6 +53,10 @@ Revision history for Async-Event-Interval
       to STOP_KILL_TIMEOUT (1s) instead of always sleeping a fixed 1s;
       returns as soon as the target process is gone (full test suite
       wallclock roughly halved)
+    - Refactor error()/status() to remove their mutual-recursion
+      side-effect chain. Crash detection now lives in a private
+      _detect_crash helper that both methods call independently
+    - Retire the undocumented -99 PID sentinel that marked crashes
     -
 
 1.13    2024-03-04

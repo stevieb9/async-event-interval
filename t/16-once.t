@@ -21,7 +21,8 @@ my $mod = 'Async::Event::Interval';
 
     is $e->status, 0, "Zero as interval sets status to complete (0)";
     is $e->error, 1, "Zero as interval sets error to true";
-    is $e->_pid, -99, "Zero as interval sets _pid to -99";
+    is $e->_pid, undef, "Zero as interval clears _pid (was -99 sentinel)";
+    is $e->pid,  undef, "...and public pid() also returns undef after completion";
     is $e->waiting, 1, "Zero as interval sets waiting to true";
 
     $e->start;

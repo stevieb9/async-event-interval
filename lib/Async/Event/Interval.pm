@@ -105,8 +105,8 @@ sub new {
 }
 sub error {
     my ($self) = @_;
-    $self->status;
-    return $self->pid && $self->pid == -99 ? 1 : 0;
+    $self->_detect_crash;
+    return $self->_crashed;
 }
 sub errors {
     my ($self) = @_;
@@ -211,33 +211,28 @@ sub start {
         warn "Event already running...\n";
         return;
     }
+    $self->_crashed(0);
     $self->_started(1);
     $self->_event(@callback_params);
 }
 sub status {
     my ($self) = @_;
 
-    if ($self->_started){
-        if (! $self->pid){
-            croak "Event is started, but no PID can be found. This is a " .
-                "fatal error. Exiting...\n";
-        }
-        if ($self->pid > 0){
-            if (kill 0, $self->pid){
-                return $self->pid;
-            }
-            else {
-                # proc must have crashed
-                $self->_started(0);
-                $self->_pid(-99);
-                $self->error;
-            }
-        }
+    $self->_detect_crash;
+
+    return 0 unless $self->_started;
+
+    if (! $self->pid) {
+        croak "Event is started, but no PID can be found. This is a " .
+              "fatal error. Exiting...\n";
     }
-    return 0;
+
+    return $self->pid;
 }
 sub stop {
     my $self = shift;
+
+    return if $self->_crashed;
 
     if ($self->pid){
         kill 9, $self->pid;
@@ -283,6 +278,25 @@ sub _cb {
     }
 
     return $self->{cb};
+}
+sub _crashed {
+    my ($self, $crashed) = @_;
+    $self->{crashed} = $crashed ? 1 : 0 if defined $crashed;
+    return $self->{crashed} ? 1 : 0;
+}
+sub _detect_crash {
+    my ($self) = @_;
+
+    # Cheap short-circuits: nothing to detect if the event is already
+    # known stopped, or if pid is unset / already cleared.
+    return unless $self->_started;
+    return unless $self->pid && $self->pid > 0;
+
+    if (! kill 0, $self->pid) {
+        $self->_started(0);
+        $self->_crashed(1);
+        $self->_pid(0);
+    }
 }
 sub _errors {
     my ($self, $increment) = @_;
@@ -572,6 +586,14 @@ Alias for C<start()>. Re-starts a C<stop()>ped event.
 Returns the event's process ID (true) if it is running, C<0> (false) if it
 isn't.
 
+B<Side effect>: calling C<status()> probes the event's child process with
+C<kill 0> to detect a crashed background process. If the process is gone,
+the event's internal C<_started> flag is cleared, an internal C<_crashed>
+flag is set, and C<pid> is cleared (so L</pid> subsequently returns
+C<undef>). Subsequent calls to C<status()>, L</error>, or L</waiting>
+see the updated state. To clear the crash flag, call L</start> or
+L</restart>.
+
 =head2 waiting
 
 Returns true if the event is dormant and is ready for a C<start()> or
@@ -582,6 +604,10 @@ C<restart()> command. Returns false if the event is already running.
 Returns true if an event crashed unexpectedly in the background, and is ready
 for a C<start()> or C<restart()> command. Returns false if the event is not in
 an error state.
+
+B<Side effect>: calling C<error()> runs the same crash probe documented
+under L</status>. The event's internal flags and PID may be mutated as a
+side effect of this call.
 
 =head2 interval($seconds)
 
@@ -683,7 +709,27 @@ The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
 
 =head2 pid
 
-Returns the Process ID that the event is running under
+Returns the Process ID the event is running under.
+
+Returns C<undef> in three cases:
+
+=over 4
+
+=item * before C<start()> has ever been called
+
+=item * after a crashed event has been detected (via a call to L</error>,
+L</status>, or L</waiting>) and until the next C<start()> / C<restart()>
+
+=back
+
+After a clean C<stop()>, returns the PID of the most recent child (now a
+dead process — provided for diagnostic purposes only). Otherwise returns
+a positive integer — the PID of the currently running child.
+
+Use L</status> and L</error> to determine which state applies; do not
+interpret the integer value beyond "some past or current child PID".
+Prior versions returned the magic value C<-99> after a crash; that
+sentinel has been retired in favor of L</error>.
 
 =head2 runs
 
