@@ -300,10 +300,14 @@ sub _rand_shm_key {
    return $key_str;
 }
 sub _rand_shm_lock {
-    # Used for the 'protected' option in the %events hash creation
+    # Used for the 'protected' option in the %events hash creation.
+    #
+    # IPC::Shareable 1.14+ persists 'protected' in a semaphore slot
+    # (SEM_PROTECTED), which the system caps at semvmx (typically
+    # 0..32767, and 0 means "unprotected"). Derive a stable, in-range
+    # value from $$ so a forked subprocess inherits the same key.
 
-    srand();
-    return int(rand(1_000_000));
+    return 1 + ($$ % 32767);
 }
 sub _runs {
     my ($self, $increment) = @_;

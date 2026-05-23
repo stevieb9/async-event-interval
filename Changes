@@ -11,6 +11,8 @@ Revision history for Async-Event-Interval
     - Test updates to conform with updates to IPC::Shareable
     - Make shared_scalar() a property of the event that created it. Clarify its
       cleanup in POD
+    - Fixes #16; _rand_shm_lock() now returns 1 + ($$ % 32767) so the value
+      fits in IPC::Shareable 1.14+'s SEM_PROTECTED semaphore slot
     -
 
 1.13    2024-03-04
