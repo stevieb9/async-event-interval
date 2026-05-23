@@ -33,7 +33,7 @@ WriteMakefile(
         'Test::SharedFork' => 0,
     },
     PREREQ_PM => {
-        'IPC::Shareable'        => 1.13,
+        'IPC::Shareable'        => 1.14,
         'Parallel::ForkManager' => 0,
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },

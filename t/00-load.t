@@ -2,36 +2,39 @@ use 5.006;
 use strict;
 use warnings;
 
+use IPC::Shareable;
 use Test::More;
 
-my $segs;
-
+my ($segs_before, $sems_before);
 BEGIN {
-    if (! $ENV{CI_TESTING}) {
-        plan skip_all => "Not on a legit CI platform...";
-    }
-    $segs = `ipcs -m | wc -l`;
-    warn "Segs before: " . `ipcs -m | wc -l` . "\n" if $ENV{PRINT_SEGS};
-
-    use_ok( 'Async::Event::Interval' ) || print "Bail out!\n";
+    $segs_before = IPC::Shareable::seg_count();
+    $sems_before = IPC::Shareable::sem_count();
 }
 
+use_ok('Async::Event::Interval') || print "Bail out!\n";
+
 use Async::Event::Interval;
-use IPC::Shareable;
 
-diag( "Testing Async::Event::Interval $Async::Event::Interval::VERSION, Perl $], $^X" );
+diag("Testing Async::Event::Interval $Async::Event::Interval::VERSION, Perl $], $^X");
 
-print "Starting with $segs segments\n";
+warn "Segs Before: $segs_before\n" if $ENV{PRINT_SEGS};
+warn "Sems Before: $sems_before\n" if $ENV{PRINT_SEGS};
 
-# Store existing segments in a shared hash to test against
-# at conclusion of test suite run
+# Persist the pre-suite seg/sem counts to a flat file so the final
+# 99-end_check.t can verify the suite as a whole leaked nothing.
 
-tie my %store, 'IPC::Shareable', {key => 'async_tests', create => 1};
+my $tmpfile = '/tmp/async_event_interval_seg_count';
 
-$store{segs} = $segs;
+# Clear any stale data from a previous interrupted run
 
-warn "Segs After: " . `ipcs -m | wc -l` . "\n" if $ENV{PRINT_SEGS};
+unlink $tmpfile if -e $tmpfile;
 
-my $e = Async::Event::Interval->new(0, sub {});
+open my $fh, '>', $tmpfile or die "Can't open $tmpfile for write: $!";
+print $fh "$segs_before\n$sems_before\n";
+close $fh;
+
+{
+    my $e = Async::Event::Interval->new(0, sub {});
+}
 
 done_testing;
