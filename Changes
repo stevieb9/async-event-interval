@@ -13,6 +13,10 @@ Revision history for Async-Event-Interval
       cleanup in POD
     - Fixes #16; _rand_shm_lock() now returns 1 + ($$ % 32767) so the value
       fits in IPC::Shareable 1.14+'s SEM_PROTECTED semaphore slot
+    - shared_scalar() segments are now tied with protected => _shm_lock() to
+      close the IPC::Shareable->clean_up_all foot-gun that could wipe them
+      out from under a running event; the owning event's DESTROY still
+      removes them via IPC::Shareable->remove
     -
 
 1.13    2024-03-04

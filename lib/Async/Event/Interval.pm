@@ -119,7 +119,11 @@ sub shared_scalar {
         croak("Could not generate a unique shared memory segment.");
     }
 
-    tie my $scalar, 'IPC::Shareable', $shm_key, {create => 1, destroy => 1};
+    tie my $scalar, 'IPC::Shareable', $shm_key, {
+        create    => 1,
+        destroy   => 1,
+        protected => _shm_lock(),
+    };
 
     $events{$self->id}->{shared_scalars}{$shm_key} = \$scalar;
 

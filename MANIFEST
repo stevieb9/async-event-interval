@@ -11,6 +11,7 @@ t/07-shm_lock.t
 t/10-shared.t
 t/11-dup_shm_key.t
 t/12-ipc_shareable.t
+t/13-shared_scalar_protected.t
 t/14-partial_second.t
 t/15-interval.t
 t/16-once.t
