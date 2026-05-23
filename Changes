@@ -37,6 +37,12 @@ Revision history for Async-Event-Interval
     - Add write-path tests and automated source audit to t/09-locking.t
     - Extract _run_callback() from _event() to deduplicate the eval +
       error-capture + store pattern and isolate $@ preservation
+    - Add _end() clean_up_protected coverage test; fix _end() mock-counter
+      test that was silently destroying the semaphore set, causing 11
+      subsequent tests to be skipped; fix events() deep-copy still treating
+      shared_scalars as a hashref instead of the new arrayref
+    - Fix fork failure silently falling through to child path and running
+      the callback in the parent process; now croaks with "fork() failed"
     -
 
 1.13    2024-03-04

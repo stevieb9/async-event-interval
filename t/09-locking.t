@@ -302,6 +302,49 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     cmp_ok $write_count, '>=', 1, "_pid() setter calls _write_events";
 }
 
+# Fork failure (PFM->start returns undef) croaks instead of falling
+# through to the child path and running the callback in the parent.
+
+{
+    my $callback_ran = 0;
+    my $e = Async::Event::Interval->new(0.5, sub { $callback_ran++ });
+
+    my $start_orig = \&Parallel::ForkManager::start;
+    no warnings 'redefine';
+    local *Parallel::ForkManager::start = sub { return undef };
+
+    my $ok = eval { $e->start; 1 };
+    my $err = $@;
+
+    is $ok, undef,
+        "start() croaks on fork failure";
+    like $err, qr/fork\(\) failed/,
+        "...with fork failure message";
+
+    is $callback_ran, 0,
+        "callback was NOT executed on fork failure";
+}
+
+# start() propagates the fork error through the _event coderef,
+# so _write_events / _read_events locks are not leaked.
+
+{
+    my $e = Async::Event::Interval->new(0.5, sub { die "should not run\n" });
+
+    my $start_orig = \&Parallel::ForkManager::start;
+    no warnings 'redefine';
+    local *Parallel::ForkManager::start = sub { return undef };
+
+    eval { $e->start };
+
+    is $e->runs, 0,
+        "runs still 0 after fork failure";
+    is $e->errors, 0,
+        "errors still 0 after fork failure";
+    is $e->interval, 0.5,
+        "interval unchanged after fork failure";
+}
+
 # The internal write-path incrementors (_errors(1), _runs(1),
 # _error_message($msg)) also go through _write_events.
 

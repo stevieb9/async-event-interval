@@ -304,6 +304,9 @@ sub _event {
 
     for (0..1){
         my $pid = $self->_pm->start;
+        if (! defined $pid) {
+            croak "fork() failed: $!";
+        }
         if ($pid){
             # this is the parent process
             $self->_pid($pid);
