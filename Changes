@@ -35,6 +35,8 @@ Revision history for Async-Event-Interval
       silently replaces the caller's handler at module load; $SIG{CHLD}
       remains at file scope (children outlive _event(), need auto-reap)
     - Add write-path tests and automated source audit to t/09-locking.t
+    - Extract _run_callback() from _event() to deduplicate the eval +
+      error-capture + store pattern and isolate $@ preservation
     -
 
 1.13    2024-03-04

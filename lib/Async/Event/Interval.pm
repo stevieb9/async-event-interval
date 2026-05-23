@@ -319,46 +319,35 @@ sub _event {
         if ($self->interval) {
             while (1) {
                 select(undef, undef, undef, $self->interval);
-
-                my $callback_success = eval {
-                    $self->_cb->(@callback_params);
-                    1;
-                };
-
-                if (! $callback_success) {
-                    my $err = $@;
-                    $self->_errors(1);
-                    $self->_error_message($err);
-                    $self->_runs(1);
-                    $self->status;
-                    die $err;
-                }
-
-                $self->_runs(1);
-                $self->status;
+                $self->_run_callback(@callback_params);
             }
         }
         else {
-            my $callback_success = eval {
-                $self->_cb->(@callback_params);
-                1;
-            };
-
-            if (! $callback_success) {
-                my $err = $@;
-                $self->_errors(1);
-                $self->_error_message($err);
-                $self->_runs(1);
-                $self->status;
-                die $err;
-            }
-
-            $self->_runs(1);
-            $self->status;
+            $self->_run_callback(@callback_params);
         }
 
         $self->_pm->finish;
     }
+}
+sub _run_callback {
+    my ($self, @params) = @_;
+
+    my $ok = eval {
+        $self->_cb->(@params);
+        1;
+    };
+
+    if (! $ok) {
+        my $err = $@;
+        $self->_errors(1);
+        $self->_error_message($err);
+        $self->_runs(1);
+        $self->status;
+        die $err;
+    }
+
+    $self->_runs(1);
+    $self->status;
 }
 sub _pm {
     my ($self) = @_;
