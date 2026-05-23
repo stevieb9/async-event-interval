@@ -651,8 +651,8 @@ Parameters:
 Optional, Integer: The number of seconds (can be floating point) to delay
 between executions.
 
-Return: Integer, the number of seconds between execution runs. If we're in
-a run-once scenario, the return will be zero C<0>.
+Return: Number (integer or float), the number of seconds between execution
+runs. If we're in a run-once scenario, the return will be zero C<0>.
 
 =head2 shared_scalar
 
@@ -740,7 +740,7 @@ The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
 
 Returns the Process ID the event is running under.
 
-Returns C<undef> in three cases:
+Returns C<undef> in two cases:
 
 =over 4
 
