@@ -120,7 +120,7 @@ sub events {
             my $event = $events{$id};
             $copy{$id} = { %$event };
             if ($copy{$id}{shared_scalars}) {
-                $copy{$id}{shared_scalars} = { %{ $copy{$id}{shared_scalars} } };
+                $copy{$id}{shared_scalars} = [ @{ $copy{$id}{shared_scalars} } ];
             }
         }
         return \%copy;

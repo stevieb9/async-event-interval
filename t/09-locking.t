@@ -431,6 +431,11 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         $orig->(@_);
     };
 
+    # Prevent clean_up_protected from destroying the semaphore set when
+    # %events is empty (events from earlier tests may have DESTROY'd).
+    my $cleanup_calls = 0;
+    local *IPC::Shareable::clean_up_protected = sub { $cleanup_calls++ };
+
     $read_count = 0;
     Async::Event::Interval::_end();
     cmp_ok $read_count, '>=', 1,
@@ -497,4 +502,25 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     $$s = 77;
     is $$s, 77,
         "original shared_scalar ref tracks live changes";
+}
+
+# _end() calls clean_up_protected only when %events is empty.
+
+{
+    my $cleanup_calls = 0;
+    no warnings 'redefine';
+    local *IPC::Shareable::clean_up_protected = sub { $cleanup_calls++ };
+
+    # With an event present, _end() must not clean up.
+    my $e = Async::Event::Interval->new(0.5, sub {});
+    Async::Event::Interval::_end();
+    is $cleanup_calls, 0,
+        "_end() does not call clean_up_protected when events exist";
+
+    # Destroy the event, removing it from %events.
+    $e = undef;
+    $cleanup_calls = 0;
+    Async::Event::Interval::_end();
+    is $cleanup_calls, 1,
+        "_end() calls clean_up_protected when %events is empty";
 }
