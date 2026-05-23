@@ -7,7 +7,7 @@ our $VERSION = '1.14';
 
 use Carp qw(croak);
 use Data::Dumper;
-use IPC::Shareable;
+use IPC::Shareable qw(:lock);
 use Parallel::ForkManager;
 
 use constant {
@@ -57,13 +57,46 @@ sub _create_events_seg {
 
 *restart = \&start;
 
+# Helpers that wrap every read/write of %events in the appropriate lock.
+# _write_events takes LOCK_EX (using IPC::Shareable's coderef form, which
+# auto-releases even on die). _read_events takes LOCK_SH, runs the
+# coderef, then always unlocks before propagating any error. Both return
+# the coderef's scalar return value. They no-op gracefully if the tie
+# has been torn down (e.g. during global destruction).
+
+sub _write_events {
+    my ($cb) = @_;
+    my $knot = tied(%events);
+    return $cb->() unless $knot;
+
+    my $r;
+    $knot->lock(LOCK_EX, sub {
+        $r = $cb->();
+    });
+    return $r;
+}
+
+sub _read_events {
+    my ($cb) = @_;
+    my $knot = tied(%events);
+    return $cb->() unless $knot;
+
+    $knot->lock(LOCK_SH);
+    my $r;
+    my $ok = eval { $r = $cb->(); 1 };
+    my $err = $@;
+    $knot->unlock;
+    die $err if !$ok;
+    return $r;
+}
+
 sub new {
     my $self = bless {}, shift;
 
     $self->id($id);
     $id++;
 
-    $events{$self->id} = {};
+    _write_events(sub { $events{$self->id} = {} });
 
     $self->_pm;
     $self->_setup(@_);
@@ -85,7 +118,23 @@ sub error_message {
     return $self->_error_message;
 }
 sub events {
-    return \%events;
+    return _read_events(sub {
+        my %copy;
+        for my $id (keys %events) {
+            my $event = $events{$id};
+            $copy{$id} = { %$event };
+            if ($copy{$id}{shared_scalars}) {
+                $copy{$id}{shared_scalars} = { %{ $copy{$id}{shared_scalars} } };
+            }
+        }
+        return \%copy;
+    });
+}
+
+# Internal: return the IPC::Shareable knot for %events so test code
+# can inspect semaphore state directly.
+sub _events_knot {
+    return tied(%events);
 }
 sub id {
     my ($self, $id) = @_;
@@ -94,7 +143,13 @@ sub id {
 }
 sub info {
     my ($self) = @_;
-    return $self->events()->{$self->id};
+    return _read_events(sub {
+        my $event = $events{$self->id} or return undef;
+        my %copy = %$event;
+        $copy{shared_scalars} = [ @{ $copy{shared_scalars} } ]
+            if $copy{shared_scalars};
+        return \%copy;
+    });
 }
 sub interval {
     my ($self, $interval) = @_;
@@ -103,10 +158,10 @@ sub interval {
         if ($interval !~ /^\d+$/ && $interval !~ /^(\d+)?\.\d+$/) {
             croak "\$interval must be an integer or float";
         }
-        $events{$self->id}{interval} = $interval;
+        _write_events(sub { $events{$self->id}{interval} = $interval });
     }
 
-    return $events{$self->id}->{interval};
+    return _read_events(sub { $events{$self->id}->{interval} });
 }
 sub pid {
     my ($self) = @_;
@@ -121,26 +176,33 @@ sub shared_scalar {
 
     my $shm_key;
     my $unique_shm_key_found = 0;
+    my $scalar;
 
-    for (0..9) {
-        $shm_key = _rand_shm_key();
-        if (! exists $events{$self->id}->{shared_scalars}{$shm_key}) {
-            $unique_shm_key_found = 1;
-            last;
+    _write_events(sub {
+        for (0..9) {
+            $shm_key = _rand_shm_key();
+            my $existing = $events{$self->id}{shared_scalars} || [];
+            if (! grep { $_ eq $shm_key } @$existing) {
+                $unique_shm_key_found = 1;
+                last;
+            }
         }
-    }
+        return unless $unique_shm_key_found;
+
+        tie $scalar, 'IPC::Shareable', $shm_key, {
+            create    => 1,
+            destroy   => 1,
+            protected => _shm_lock(),
+        };
+
+        push @{ $events{$self->id}{shared_scalars} }, $shm_key;
+    });
 
     if (! $unique_shm_key_found) {
         croak("Could not generate a unique shared memory segment.");
     }
 
-    tie my $scalar, 'IPC::Shareable', $shm_key, {
-        create    => 1,
-        destroy   => 1,
-        protected => _shm_lock(),
-    };
-
-    $events{$self->id}->{shared_scalars}{$shm_key} = \$scalar;
+    push @{ $self->{_shared_scalars} }, \$scalar;
 
     return \$scalar;
 }
@@ -220,13 +282,17 @@ sub _cb {
 }
 sub _errors {
     my ($self, $increment) = @_;
-    $events{$self->id}->{errors}++ if defined $increment;
-    return $events{$self->id}->{errors};
+    if (defined $increment) {
+        _write_events(sub { $events{$self->id}->{errors}++ });
+    }
+    return _read_events(sub { $events{$self->id}->{errors} });
 }
 sub _error_message {
     my ($self, $msg) = @_;
-    $events{$self->id}->{error_message} = $msg if defined $msg;
-    return $events{$self->id}->{error_message};
+    if (defined $msg) {
+        _write_events(sub { $events{$self->id}->{error_message} = $msg });
+    }
+    return _read_events(sub { $events{$self->id}->{error_message} });
 }
 sub _event {
     my ($self, @event_params) = @_;
@@ -259,11 +325,12 @@ sub _event {
                 };
 
                 if (! $callback_success) {
+                    my $err = $@;
                     $self->_errors(1);
-                    $self->_error_message($@);
+                    $self->_error_message($err);
                     $self->_runs(1);
                     $self->status;
-                    croak $@;
+                    die $err;
                 }
 
                 $self->_runs(1);
@@ -277,11 +344,12 @@ sub _event {
             };
 
             if (! $callback_success) {
+                my $err = $@;
                 $self->_errors(1);
-                $self->_error_message($@);
+                $self->_error_message($err);
                 $self->_runs(1);
                 $self->status;
-                croak $@;
+                die $err;
             }
 
             $self->_runs(1);
@@ -304,19 +372,12 @@ sub _pid {
     my ($self, $pid) = @_;
     if (defined $pid) {
         $self->{pid} = $pid;
-        $events{$self->id}->{pid} = $self->{pid};
+        _write_events(sub { $events{$self->id}->{pid} = $self->{pid} });
     }
     return $self->{pid} || undef;
 }
 sub _rand_shm_key {
-    my $key_str;
-
-    for (0..11) {
-        srand();
-        $key_str .= ('A'..'Z')[rand(26)];
-    }
-
-   return $key_str;
+    return sprintf('0x%x', int(rand(0x7FFFFFFF)));
 }
 sub _rand_shm_lock {
     # Used for the 'protected' option in the %events hash creation.
@@ -330,8 +391,10 @@ sub _rand_shm_lock {
 }
 sub _runs {
     my ($self, $increment) = @_;
-    $events{$self->id}->{runs}++ if defined $increment;
-    return $events{$self->id}->{runs};
+    if (defined $increment) {
+        _write_events(sub { $events{$self->id}->{runs}++ });
+    }
+    return _read_events(sub { $events{$self->id}->{runs} });
 }
 sub _setup {
     my ($self, $interval, $cb, @args) = @_;
@@ -348,8 +411,10 @@ sub _started {
     return $self->{started};
 }
 sub DESTROY {
-    if (defined $_[0]) {
-        $_[0]->stop if $_[0]->pid;
+    my $self = $_[0];
+
+    if (defined $self) {
+        $self->stop if $self->pid;
     }
 
     # On events with interval of zero, ForkManager runs finish(), which
@@ -358,23 +423,24 @@ sub DESTROY {
 
     return if (caller())[0] eq 'Parallel::ForkManager::Child';
 
-    # Release any shared_scalar segments owned by this event before we
-    # drop the %events entry that tracks them. The segments are tied
-    # independently of %events (they are not _magic_tie children), so
-    # they need explicit removal.
+    # Release any shared_scalar segments owned by this event. These are
+    # tracked in $self->{_shared_scalars}, not inside %events, so they
+    # can be cleaned up outside the %events lock.
 
-    if (my $scalars = $events{$_[0]->id}{shared_scalars}) {
-        for my $scalar_ref (values %$scalars) {
-            next unless ref $scalar_ref eq 'SCALAR';
-            my $knot = tied $$scalar_ref;
+    if ($self->{_shared_scalars}) {
+        for my $scalar (@{ $self->{_shared_scalars} }) {
+            next unless ref $scalar eq 'SCALAR';
+            my $knot = tied $$scalar;
             eval { $knot->remove } if $knot;
         }
     }
 
-    delete $events{$_[0]->id};
+    _write_events(sub {
+        delete $events{$self->id};
+    });
 }
 sub _end {
-    if (! keys %events) {
+    if (! _read_events(sub { scalar keys %events })) {
         IPC::Shareable::clean_up_protected(_shm_lock());
     }
 }
@@ -551,15 +617,20 @@ Returns the error message (if any) that caused the most recent event crash.
 
 =head2 events
 
-This is a class method that returns a hash reference that contains the data of
-all existing events.
+Returns a plain hash reference containing a snapshot of the data for all
+existing events. The returned hash is a B<copy> — modifying it will not
+affect the live events. C<shared_scalars> is an arrayref of the hex key
+strings for each shared scalar created by the event; use the scalar
+reference returned by L</shared_scalar> to read or write values.
+
+The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
 
     $VAR1 = {
         '0' => {
-            'shared_scalars' => {
-                '0x555A4654' => \'hello, world',
-                '0x4C534758' => \98
-             },
+            'shared_scalars' => [
+                '0x4a3f2c1b5d6e',
+                '0x7f8e9d0c1b2a'
+             ],
             'pid'       => 11859,
             'runs'      => 16,
             'errors'    => 0,
@@ -580,13 +651,18 @@ Returns the integer ID of the event.
 
 =head2 info
 
-Returns a hash reference containing various data about the event. Eg.
+Returns a hash reference containing a snapshot of the event's data. The
+returned hash is a B<copy> — modifying it will not affect the live event.
+C<shared_scalars> is an arrayref of hex key strings; use the scalar
+reference returned by L</shared_scalar> to read or write values.
+
+The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
 
     $VAR1 = {
-        'shared_scalars' => {
-            '0x55435449' => \'hello, world!,
-            '0x43534644' => \98
-         },
+        'shared_scalars' => [
+            '0x4a3f2c1b5d6e',
+            '0x7f8e9d0c1b2a'
+         ],
         'pid'      => 6841,
         'runs'     => 4077,
         'errors'   => 0,
