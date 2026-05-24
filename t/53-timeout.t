@@ -43,6 +43,27 @@ use Async::Event::Interval;
         "...with validation message";
 }
 
+# Fractional seconds croak (integer-only by design; CORE::alarm()
+# silently ignores sub-second values on macOS 26 / Perl 5.36).
+{
+    my $e = Async::Event::Interval->new(0.5, sub {});
+    my $ok = eval { $e->timeout(0.5); 1 };
+    my $err = $@;
+    is $ok, undef, "timeout(0.5) croaks";
+    like $err, qr/must be a positive integer/,
+        "...with validation message";
+}
+
+# Empty string croaks (only undef or a non-negative integer are valid).
+{
+    my $e = Async::Event::Interval->new(0.5, sub {});
+    my $ok = eval { $e->timeout(""); 1 };
+    my $err = $@;
+    is $ok, undef, "timeout('') croaks";
+    like $err, qr/must be a positive integer/,
+        "...with validation message";
+}
+
 # timeout(0) disables the timeout.
 {
     my $e = Async::Event::Interval->new(0.5, sub {});
@@ -97,6 +118,9 @@ use Async::Event::Interval;
 }
 
 # Interval mode: callback exceeds timeout, child exits with error.
+# A timeout in interval mode terminates the whole loop (the child dies
+# via _pm->finish(1), same as any other crash); the user must restart()
+# to resume. This pins down that design choice.
 {
     my $e = Async::Event::Interval->new(0.1, sub {
         select(undef, undef, undef, 5);
@@ -107,6 +131,35 @@ use Async::Event::Interval;
     is $e->errors, 1, "interval over timeout: errors incremented";
     like $e->error_message, qr/timed out after 1s/,
         "interval over timeout: error_message records timeout";
+    is $e->status, 0,
+        "interval over timeout: status() is 0 (child no longer running)";
+    is $e->error, 1,
+        "interval over timeout: error() is 1 (event needs restart)";
+    is $e->pid, undef,
+        "interval over timeout: pid() cleared by _detect_crash";
+}
+
+# Changing timeout() mid-stream takes effect on the next iteration.
+# _run_callback reads $self->timeout from shared %events on each entry,
+# so a setter call in the parent is visible to the child's next call.
+{
+    my $e = Async::Event::Interval->new(0.1, sub {
+        select(undef, undef, undef, 2);
+    });
+    $e->timeout(5);                          # generous, 2s callback completes
+    $e->start;
+    select(undef, undef, undef, 2.3);        # let iteration 1 finish
+    is $e->errors, 0,
+        "dynamic timeout: no errors under generous initial timeout";
+    cmp_ok $e->runs, '>=', 1,
+        "dynamic timeout: at least one iteration completed";
+
+    $e->timeout(1);                          # shorten below callback runtime
+    select(undef, undef, undef, 3.5);        # next iteration starts & fires
+    is $e->errors, 1,
+        "dynamic timeout: error recorded after timeout was shortened";
+    like $e->error_message, qr/timed out after 1s/,
+        "dynamic timeout: error_message reflects the new timeout";
 }
 
 # info() snapshot includes the timeout value.

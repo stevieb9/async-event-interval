@@ -9,6 +9,7 @@ use Carp qw(croak);
 use Data::Dumper;
 use IPC::Shareable qw(:lock);
 use Parallel::ForkManager;
+use POSIX ();
 
 use constant {
     SHM_CREATE_RETRIES      => 100,
@@ -186,13 +187,8 @@ sub timeout {
     my ($self, $timeout) = @_;
 
     if (@_ > 1) {
-        if (defined $timeout && length $timeout) {
-            if ($timeout !~ /^\d+$/) {
-                croak "\$timeout must be a positive integer";
-            }
-            if ($timeout < 0) {
-                croak "\$timeout must be positive";
-            }
+        if (defined $timeout && $timeout !~ /^\d+$/) {
+            croak "\$timeout must be a positive integer or undef";
         }
         _write_events(sub { $events{$self->id}{timeout} = $timeout });
     }
@@ -407,9 +403,17 @@ sub _run_callback {
 
     my $ok = eval {
         if ($timeout) {
-            require POSIX;
             my $handler = sub { die "timed out after ${timeout}s\n" };
             local $SIG{ALRM} = $handler;
+
+            # Re-install SIGALRM via POSIX::sigaction with flags=0 to
+            # explicitly clear SA_RESTART. Perl's default $SIG{ALRM}
+            # setup leaves SA_RESTART on, which causes the kernel to
+            # transparently resume select() and other restartable
+            # syscalls after SIGALRM — silently swallowing the timeout
+            # on Linux (and anywhere SA_RESTART is the default). The
+            # local $SIG{ALRM} above still does the safe-signal dispatch
+            # to the Perl coderef; sigaction just fixes the kernel flags.
 
             my $sigset = POSIX::SigSet->new(POSIX::SIGALRM());
             my $sa     = POSIX::SigAction->new($handler, $sigset, 0);
@@ -724,12 +728,18 @@ terminate itself with an error.
 
 Set a timeout of C<0> or C<undef> to disable it (the default is no timeout).
 
+The timeout is read from shared memory at the start of every callback
+invocation, so changes made via this setter while an event is running
+take effect on the next iteration of the interval loop (mirroring
+L</interval($seconds)>).
+
 Parameters:
 
     $seconds
 
-Optional, Integer: The number of seconds the callback
-is allowed to execute for before timing out. Must be a positive value.
+Optional, Integer: The number of whole seconds the callback is allowed
+to execute for before timing out. Must be a non-negative integer;
+fractional seconds are not supported. Use C<0> or C<undef> to disable.
 
 =head2 shared_scalar
 
@@ -758,6 +768,11 @@ unexpectedly.
 =head2 error_message
 
 Returns the error message (if any) that caused the most recent event crash.
+
+If the crash was caused by L</timeout($seconds)> firing, the message has
+the form C<"timed out after Ns\n"> (where C<N> is the timeout in whole
+seconds), which consumers can pattern-match on to distinguish timeouts
+from other callback failures.
 
 =head2 events
 
@@ -909,27 +924,6 @@ the program so you can figure out what's wrong with your callback code.
             $event->restart;
         }
     }
-
-=head2 Event suicidal timeout
-
-You can have your callback commit suicide if it takes too long to run. We use
-Perl's C<$SIG{ALRM}> and C<alarm()> to do this. In your main application, you
-can check the status of the event and restart it or whatever else you need.
-
-    my $event_timeout = 30;
-
-    my $event = Async::Event::Interval->new(
-        30,
-        sub {
-            local $SIG{ALRM} = sub { print "Committing suicide!\n"; kill 9, $$; };
-
-            alarm $event_timeout;
-
-            # Do stuff here. If it takes 30 seconds, we kill ourselves
-
-            alarm 0;
-        },
-    );
 
 =head2 Per callback execution parameters
 

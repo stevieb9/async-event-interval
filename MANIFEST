@@ -9,6 +9,7 @@ t/05-base.t
 t/06-destroy.t
 t/07-shm_lock.t
 t/08-bootstrap_retry.t
+t/09-locking.t
 t/10-shared.t
 t/11-dup_shm_key.t
 t/12-ipc_shareable.t
@@ -24,6 +25,9 @@ t/40-event_crash.t
 t/45-new_params_args.t
 t/46-callback_params.t
 t/50-info_events.t
+t/51-id_counter.t
+t/52-continue.t
+t/53-timeout.t
 t/55-shared_event_state.t
 t/60-error_handling.t
 t/65-protected_option_for_events_hash_default.t

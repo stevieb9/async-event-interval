@@ -71,7 +71,9 @@ Revision history for Async-Event-Interval
       killed by SIGTERM; stop() sets it, start() clears it, the loop checks it
       on each iteration
     - Closes #14; Add timeout() accessor so a callback that exceeds the
-      specified number of whole seconds self-terminates with an error
+      specified number of whole seconds self-terminates with an error.
+      Accepts a non-negative integer or undef; fractional seconds are
+      not supported
     - 
     
 1.13    2024-03-04
