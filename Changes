@@ -60,8 +60,16 @@ Revision history for Async-Event-Interval
     - stop() now sends SIGTERM first (STOP_TERM_TIMEOUT 0.5s) and escalates
       to SIGKILL only if the child is still alive; _signal_and_wait() helper
       encapsulates the signal-and-poll logic
+    - Replace mutable module-level $is_child_process flag with
+      $$ != $creator_pid check in DESTROY; a forked child inherently has
+      a different PID than the process that loaded the module, so no
+      mutable state that mock-fork tests can corrupt is needed
     - Replace lexical $id counter with shared _id_counter in %events to
       prevent duplicate IDs across forked processes
+    - Closes #15; Add _stop_requested cooperative flag in shared %events so the
+      child's interval loop can break cleanly and call finish() instead of being
+      killed by SIGTERM; stop() sets it, start() clears it, the loop checks it
+      on each iteration
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()

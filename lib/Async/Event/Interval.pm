@@ -143,13 +143,17 @@ sub _events_knot {
     return tied(%events);
 }
 
-# Internal: test-accessors for the shared metadata counters. Coderefs
-# run inside _read_events so they can see the module's lexical %events.
-sub _event_count {
+# Internal: test-accessors for shared metadata keys. Coderefs run
+# inside _read_events so they can see the module's lexical %events.
+sub _events_count {
     return _read_events(sub { $events{_event_count} || 0 });
 }
-sub _next_id {
+sub _events_next_id {
     return _read_events(sub { $events{_id_counter} || 0 });
+}
+sub _events_stop_requested {
+    my ($self) = @_;
+    return _read_events(sub { $events{$self->id}{_stop_requested} });
 }
 sub id {
     my ($self, $id) = @_;
@@ -228,6 +232,7 @@ sub start {
         return;
     }
     $self->_crashed(0);
+    _write_events(sub { delete $events{$self->id}{_stop_requested} });
     $self->_started(1);
     $self->_event(@callback_params);
 }
@@ -252,6 +257,11 @@ sub stop {
     return unless $self->pid;
 
     $self->_started(0);
+
+    # Set cooperative stop flag so a well-behaved child exits its
+    # event loop on the next iteration. The signals below act as a
+    # safety net for children stuck in a long-running callback.
+    _write_events(sub { $events{$self->id}{_stop_requested} = 1 });
 
     # Try graceful SIGTERM first so a user-installed SIGTERM handler in
     # the callback can do cleanup (close files, release locks, etc.).
@@ -350,13 +360,17 @@ sub _event {
 
         # set the child's proc id
 
-        $self->_pid($$);
+        $self->{pid} = $$;
 
         # if no interval, run only once
 
         if ($self->interval) {
             eval {
                 while (1) {
+                    if (_read_events(sub { $events{$self->id}{_stop_requested} })) {
+                        last;
+                    }
+
                     select(undef, undef, undef, $self->interval);
                     $self->_run_callback(@callback_params);
                 }
@@ -456,6 +470,12 @@ sub _started {
 }
 sub DESTROY {
     my $self = $_[0];
+
+    # The child process inherits copies of ALL event objects, not just
+    # its own. Skip everything — the parent owns cleanup of %events
+    # and the child must never signal or touch shared state. A forked
+    # child has a different PID than the process that loaded the module.
+    return if $$ != $creator_pid;
 
     if (defined $self) {
         $self->stop if $self->pid;

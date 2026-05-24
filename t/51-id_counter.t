@@ -27,22 +27,22 @@ use Async::Event::Interval;
 
 # _event_count increments on new(), decrements on DESTROY.
 {
-    my $before = Async::Event::Interval::_event_count();
+    my $before = Async::Event::Interval::_events_count();
 
     my $e0 = Async::Event::Interval->new(0, sub {});
-    is Async::Event::Interval::_event_count(), $before + 1,
+    is Async::Event::Interval::_events_count(), $before + 1,
         "_event_count incremented on new()";
 
     my $e1 = Async::Event::Interval->new(0, sub {});
-    is Async::Event::Interval::_event_count(), $before + 2,
+    is Async::Event::Interval::_events_count(), $before + 2,
         "_event_count incremented again";
 
     undef $e1;
-    is Async::Event::Interval::_event_count(), $before + 1,
+    is Async::Event::Interval::_events_count(), $before + 1,
         "_event_count decremented on DESTROY";
 
     undef $e0;
-    is Async::Event::Interval::_event_count(), $before,
+    is Async::Event::Interval::_events_count(), $before,
         "_event_count back to baseline after all events destroyed";
 }
 
@@ -73,10 +73,10 @@ use Async::Event::Interval;
 
 # Both _id_counter and _event_count survive across DESTROY of all events.
 {
-    my $ct = Async::Event::Interval::_event_count();
+    my $ct = Async::Event::Interval::_events_count();
     is $ct, 0, "_event_count is 0 after all events destroyed";
 
-    my $id_ct = Async::Event::Interval::_next_id();
+    my $id_ct = Async::Event::Interval::_events_next_id();
     cmp_ok $id_ct, '>', 0,
         "_id_counter persists after all events destroyed ($id_ct)";
 }
@@ -84,8 +84,8 @@ use Async::Event::Interval;
 # Fork does not corrupt shared counters, and events created after
 # fork still get unique IDs.
 {
-    my $ct_before = Async::Event::Interval::_next_id();
-    my $ev_before = Async::Event::Interval::_event_count();
+    my $ct_before = Async::Event::Interval::_events_next_id();
+    my $ev_before = Async::Event::Interval::_events_count();
 
     my $pid = fork;
     die "fork: $!" unless defined $pid;
@@ -97,9 +97,9 @@ use Async::Event::Interval;
     waitpid $pid, 0;
     $SIG{CHLD} = 'IGNORE';
 
-    is Async::Event::Interval::_next_id(), $ct_before,
+    is Async::Event::Interval::_events_next_id(), $ct_before,
         "simple fork does not corrupt _id_counter";
-    is Async::Event::Interval::_event_count(), $ev_before,
+    is Async::Event::Interval::_events_count(), $ev_before,
         "simple fork does not corrupt _event_count";
 
     # After the fork, new events continue from the same counter.
@@ -107,6 +107,6 @@ use Async::Event::Interval;
     my $e1 = Async::Event::Interval->new(0, sub {});
     is $e0->id, $ct_before,     "post-fork event gets expected next ID";
     is $e1->id, $ct_before + 1, "post-fork second event gets sequential ID";
-    is Async::Event::Interval::_next_id(), $ct_before + 2,
+    is Async::Event::Interval::_events_next_id(), $ct_before + 2,
         "counter advanced past post-fork events";
 }
