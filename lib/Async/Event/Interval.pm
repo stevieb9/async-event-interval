@@ -762,7 +762,7 @@ Returns the error message (if any) that caused the most recent event crash.
 =head2 events
 
 Returns a plain hash reference containing a snapshot of the data for all
-existing events. The returned hash is a B<copy> — modifying it will not
+existing events. The returned hash is a B<copy>; modifying it will not
 affect the live events. C<shared_scalars> is an arrayref of the hex key
 strings for each shared scalar created by the event; use the scalar
 reference returned by L</shared_scalar> to read or write values.
@@ -796,7 +796,7 @@ Returns the integer ID of the event.
 =head2 info
 
 Returns a hash reference containing a snapshot of the event's data. The
-returned hash is a B<copy> — modifying it will not affect the live event.
+returned hash is a B<copy>; modifying it will not affect the live event.
 C<shared_scalars> is an arrayref of hex key strings; use the scalar
 reference returned by L</shared_scalar> to read or write values.
 
@@ -829,8 +829,8 @@ L</status>, or L</waiting>) and until the next C<start()> / C<restart()>
 =back
 
 After a clean C<stop()>, returns the PID of the most recent child (now a
-dead process — provided for diagnostic purposes only). Otherwise returns
-a positive integer — the PID of the currently running child.
+dead process; provided for diagnostic purposes only). Otherwise returns
+a positive integer; the PID of the currently running child.
 
 Use L</status> and L</error> to determine which state applies; do not
 interpret the integer value beyond "some past or current child PID".
