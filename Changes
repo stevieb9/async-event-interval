@@ -77,6 +77,9 @@ Revision history for Async-Event-Interval
     - Closes #9; Add immediate() method. Set a flag to have the event fire
       immediately on start rather than waiting for the first interval to be
       reached
+    - Fixes #11; Call shmctl(IPC_RMID)/semctl(IPC_RMID) at %events tie
+      creation so the kernel auto-frees SysV IPC resources on last detach,
+      preventing leaks from hard crashes (disabled on Darwin)
     -
     
 1.13    2024-03-04

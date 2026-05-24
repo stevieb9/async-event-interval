@@ -8,6 +8,7 @@ our $VERSION = '1.14';
 use Carp qw(croak);
 use Data::Dumper;
 use IPC::Shareable qw(:lock);
+use IPC::SysV qw(IPC_RMID);
 use Parallel::ForkManager;
 use POSIX ();
 
@@ -32,6 +33,7 @@ my $creator_pid = $$;
 sub _create_events_seg {
     my $created;
     my $tries = 0;
+    my $key;
 
     while (! $created) {
         if ($tries++ >= SHM_CREATE_RETRIES) {
@@ -41,9 +43,10 @@ sub _create_events_seg {
               . " attempts: $@";
         }
 
+        $key = _rand_shm_key();
         $created = eval {
             tie %events, 'IPC::Shareable', {
-                key         => _rand_shm_key(),
+                key         => $key,
                 create      => 1,
                 exclusive   => 1,
                 protected   => _shm_lock(),
@@ -54,7 +57,29 @@ sub _create_events_seg {
         };
     }
 
+    _mark_events_seg_for_destroy($key);
+
     return $created;
+}
+
+sub _mark_events_seg_for_destroy {
+    my ($hex_key) = @_;
+
+    # On macOS, shmctl(IPC_RMID) immediately destroys the segment and
+    # its contents — reads return empty, writes write nothing. The END
+    # block cleanup path handles normal exit; crash-cleanup via
+    # IPC_RMID is not fixable on Darwin.
+    return if $^O eq 'darwin';
+
+    my $key = oct($hex_key);
+
+    eval {
+        my $shm_id = shmget($key, 0, 0);
+        shmctl($shm_id, IPC_RMID, 0) if defined $shm_id;
+
+        my $sem_id = semget($key, 0, 0);
+        semctl($sem_id, 0, IPC_RMID, 0) if defined $sem_id;
+    };
 }
 
 *restart = \&start;
