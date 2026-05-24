@@ -74,7 +74,10 @@ Revision history for Async-Event-Interval
       specified number of whole seconds self-terminates with an error.
       Accepts a non-negative integer or undef; fractional seconds are
       not supported
-    - 
+    - Closes #9; Add immediate() method. Set a flag to have the event fire
+      immediately on start rather than waiting for the first interval to be
+      reached
+    -
     
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()

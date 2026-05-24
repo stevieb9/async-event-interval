@@ -195,6 +195,19 @@ sub timeout {
 
     return _read_events(sub { $events{$self->id}->{timeout} });
 }
+sub immediate {
+    my ($self, $value) = @_;
+
+    if (@_ > 1) {
+        if (defined $value && $value !~ /^\d+$/) {
+            croak "\$value must be a positive integer or undef";
+        }
+        _write_events(sub { $events{$self->id}{immediate} = $value });
+    }
+
+    return _read_events(sub { $events{$self->id}{immediate} });
+}
+
 sub pid {
     my ($self) = @_;
     return $self->_pid;
@@ -379,9 +392,16 @@ sub _event {
 
         if ($self->interval) {
             eval {
+                my $ran_immediate;
                 while (1) {
                     if (_read_events(sub { $events{$self->id}{_stop_requested} })) {
                         last;
+                    }
+
+                    if (! $ran_immediate && $self->immediate) {
+                        $ran_immediate = 1;
+                        $self->_run_callback(@callback_params);
+                        next;
                     }
 
                     select(undef, undef, undef, $self->interval);
@@ -647,6 +667,9 @@ Optional: Set a per-callback-execution timeout via L</timeout($seconds)>
 before calling C<start> to have the event terminate itself if a callback
 runs longer than the specified number of seconds.
 
+Optional: Set C<immediate> to have the callback fire immediately on
+C<start>, rather than waiting for the first interval. See L</immediate($value)>.
+
 Also note: These parameters are sent into the event only once. Each
 time the callback is called, they will receive the exact same set of params.
 
@@ -740,6 +763,27 @@ Parameters:
 Optional, Integer: The number of whole seconds the callback is allowed
 to execute for before timing out. Must be a non-negative integer;
 fractional seconds are not supported. Use C<0> or C<undef> to disable.
+
+=head2 immediate($value)
+
+Sets (or gets) whether the callback fires immediately on C<start>, bypassing
+the first interval wait. Subsequent invocations follow the normal interval
+cadence.
+
+Set a value of C<1> to enable immediate first execution. Set to C<0> or
+C<undef> to disable (the default).
+
+The flag is read from shared memory at the start of the event loop, so changes
+made via this setter before calling C<start> take effect. Setting it after the
+event is started has no effect on the current run; the event must be restarted
+for a change to apply.
+
+Parameters:
+
+    $value
+
+Optional, Integer: C<1> to enable immediate first execution, C<0> or C<undef>
+to disable. Must be a non-negative integer when defined.
 
 =head2 shared_scalar
 
@@ -1078,6 +1122,20 @@ and update the same hash.
 
         $shared_data{$$}{called_count}++;
     }
+
+=head2 Immediate first execution
+
+Set C<immediate> to have the callback fire right away on C<start>, then repeat
+at the regular interval thereafter:
+
+    use Async::Event::Interval;
+
+    my $event = Async::Event::Interval->new(5, sub { print "hey\n"; });
+    $event->immediate(1);
+    $event->start;
+
+    sleep 10;
+    $event->stop;
 
 =head1 AUTHOR
 
