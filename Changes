@@ -70,7 +70,10 @@ Revision history for Async-Event-Interval
       child's interval loop can break cleanly and call finish() instead of being
       killed by SIGTERM; stop() sets it, start() clears it, the loop checks it
       on each iteration
-
+    - Closes #14; Add timeout() accessor so a callback that exceeds the
+      specified number of whole seconds self-terminates with an error
+    - 
+    
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()
       method (closes #10)

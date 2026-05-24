@@ -182,6 +182,23 @@ sub interval {
 
     return _read_events(sub { $events{$self->id}->{interval} });
 }
+sub timeout {
+    my ($self, $timeout) = @_;
+
+    if (@_ > 1) {
+        if (defined $timeout && length $timeout) {
+            if ($timeout !~ /^\d+$/) {
+                croak "\$timeout must be a positive integer";
+            }
+            if ($timeout < 0) {
+                croak "\$timeout must be positive";
+            }
+        }
+        _write_events(sub { $events{$self->id}{timeout} = $timeout });
+    }
+
+    return _read_events(sub { $events{$self->id}->{timeout} });
+}
 sub pid {
     my ($self) = @_;
     return $self->_pid;
@@ -386,10 +403,31 @@ sub _event {
 sub _run_callback {
     my ($self, @params) = @_;
 
+    my $timeout = $self->timeout;
+
     my $ok = eval {
-        $self->_cb->(@params);
+        if ($timeout) {
+            require POSIX;
+            my $handler = sub { die "timed out after ${timeout}s\n" };
+            local $SIG{ALRM} = $handler;
+
+            my $sigset = POSIX::SigSet->new(POSIX::SIGALRM());
+            my $sa     = POSIX::SigAction->new($handler, $sigset, 0);
+            my $old    = POSIX::SigAction->new();
+            POSIX::sigaction(POSIX::SIGALRM(), $sa, $old);
+
+            alarm($timeout);
+            $self->_cb->(@params);
+            alarm(0);
+
+            POSIX::sigaction(POSIX::SIGALRM(), $old);
+        }
+        else {
+            $self->_cb->(@params);
+        }
         1;
     };
+    alarm(0) if $timeout;
 
     if (! $ok) {
         my $err = $@;
@@ -601,6 +639,10 @@ code will not be seen in the event, and vice-versa. See L</shared_scalar> if
 you'd like to use variables that can be shared between the main application and
 the events.
 
+Optional: Set a per-callback-execution timeout via L</timeout($seconds)>
+before calling C<start> to have the event terminate itself if a callback
+runs longer than the specified number of seconds.
+
 Also note: These parameters are sent into the event only once. Each
 time the callback is called, they will receive the exact same set of params.
 
@@ -673,6 +715,21 @@ between executions.
 
 Return: Number (integer or float), the number of seconds between execution
 runs. If we're in a run-once scenario, the return will be zero C<0>.
+
+=head2 timeout($seconds)
+
+Sets (or gets) a per-callback-execution timeout in seconds. If the event's
+callback takes longer than the specified time to complete, the event will
+terminate itself with an error.
+
+Set a timeout of C<0> or C<undef> to disable it (the default is no timeout).
+
+Parameters:
+
+    $seconds
+
+Optional, Integer: The number of seconds the callback
+is allowed to execute for before timing out. Must be a positive value.
 
 =head2 shared_scalar
 
