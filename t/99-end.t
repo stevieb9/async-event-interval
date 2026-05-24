@@ -7,9 +7,6 @@ use Test::More;
 
 my $tmpfile = '/tmp/async_event_interval_seg_count';
 
-# Guarantee the tmp file is removed even if an assertion below fails or
-# the test bails early.
-
 END {
     unlink $tmpfile if defined $tmpfile && -e $tmpfile;
 }
@@ -21,6 +18,10 @@ open my $fh, '<', $tmpfile or die "Can't open $tmpfile for read: $!";
 chomp(my $start_segs = <$fh>);
 chomp(my $start_sems = <$fh>);
 close $fh;
+
+my $removed = IPC::Shareable::clean_up_testing('Async::Event::Interval');
+diag "Suite-final clean_up_testing removed $removed leaked segments"
+    if $removed;
 
 my $segs = IPC::Shareable::seg_count();
 my $sems = IPC::Shareable::sem_count();

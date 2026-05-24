@@ -5,6 +5,7 @@ MANIFEST			This list of files
 MANIFEST.SKIP
 README.md
 t/00-load.t
+t/04-testing_flag.t
 t/05-base.t
 t/06-destroy.t
 t/07-shm_lock.t

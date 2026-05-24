@@ -7,6 +7,12 @@ use Test::More;
 
 my ($segs_before, $sems_before);
 BEGIN {
+    IPC::Shareable->testing_set('Async::Event::Interval');
+
+    my $removed = IPC::Shareable::clean_up_testing('Async::Event::Interval');
+    diag "Removed $removed orphaned AEI testing segments from a prior run"
+        if $removed;
+
     $segs_before = IPC::Shareable::seg_count();
     $sems_before = IPC::Shareable::sem_count();
 }
@@ -20,12 +26,7 @@ diag("Testing Async::Event::Interval $Async::Event::Interval::VERSION, Perl $], 
 warn "Segs Before: $segs_before\n" if $ENV{PRINT_SEGS};
 warn "Sems Before: $sems_before\n" if $ENV{PRINT_SEGS};
 
-# Persist the pre-suite seg/sem counts to a flat file so the final
-# 99-end_check.t can verify the suite as a whole leaked nothing.
-
 my $tmpfile = '/tmp/async_event_interval_seg_count';
-
-# Clear any stale data from a previous interrupted run
 
 unlink $tmpfile if -e $tmpfile;
 

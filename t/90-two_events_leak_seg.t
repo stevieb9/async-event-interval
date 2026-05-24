@@ -6,6 +6,7 @@ use Test::More;
 
 my ($segs_begin, $sems_begin);
 BEGIN {
+    IPC::Shareable->testing_set('Async::Event::Interval');
     $segs_begin = IPC::Shareable::seg_count();
     $sems_begin = IPC::Shareable::sem_count();
 }
