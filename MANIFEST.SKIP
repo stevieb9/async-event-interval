@@ -49,3 +49,5 @@ profiling/
 ^plans/
 ^examples/
 .claude/
+^[^/]+\.md$
+

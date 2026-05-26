@@ -12,24 +12,32 @@ use Parallel::ForkManager;
 use POSIX ();
 
 use constant {
+    # Number of tries to create the %events cache
     SHM_CREATE_RETRIES      => 100,
+
+    # Seconds to allow a deadlock cleanup in _end() 
     END_LOCK_TIMEOUT        => 2,
+
+    # Allow TERM signal to work for this many seconds before KILL
     STOP_TERM_TIMEOUT       => 0.5,
+
+    # Allow KILL signal to work for this many seconds before croaking
     STOP_KILL_TIMEOUT       => 1,
+
+    # Seconds between checks to verify that stop signal worked
     STOP_KILL_POLL_INTERVAL => 0.05,
 };
-
 
 $SIG{CHLD} = 'IGNORE';
 
 my %events;
 my $shared_memory_protect_lock = _rand_shm_lock();
 
-_create_events_seg();
+_create_events_segment();
 
 my $creator_pid = $$;
 
-sub _create_events_seg {
+sub _create_events_segment {
     my $created;
     my $tries = 0;
 
@@ -59,43 +67,13 @@ sub _create_events_seg {
 
 *restart = \&start;
 
-# Helpers that wrap every read/write of %events in the appropriate lock.
-# _write_events takes LOCK_EX (using IPC::Shareable's coderef form, which
-# auto-releases even on die). _read_events takes LOCK_SH, runs the
-# coderef, then always unlocks before propagating any error. Both return
-# the coderef's scalar return value. They no-op gracefully if the tie
-# has been torn down (e.g. during global destruction).
-
-sub _write_events {
-    my ($cb) = @_;
-    my $knot = tied(%events);
-    return $cb->() unless $knot;
-
-    my $r;
-    $knot->lock(LOCK_EX, sub {
-        $r = $cb->();
-    });
-    return $r;
-}
-
-sub _read_events {
-    my ($cb) = @_;
-    my $knot = tied(%events);
-    return $cb->() unless $knot;
-
-    $knot->lock(LOCK_SH);
-    my $r;
-    my $ok = eval { $r = $cb->(); 1 };
-    my $err = $@;
-    $knot->unlock;
-    die $err if !$ok;
-    return $r;
-}
+# Every access to the %events has MUST go through _events_read() and
+# _events_write(). See the example in new() for how they are used.
 
 sub new {
     my $self = bless {}, shift;
 
-    _write_events(sub {
+    _events_write(sub {
         $events{_id_counter} //= 0;
         $events{_event_count} //= 0;
         my $id = $events{_id_counter}++;
@@ -115,16 +93,16 @@ sub error {
     $self->_detect_crash;
     return $self->_crashed;
 }
-sub errors {
-    my ($self) = @_;
-    return $self->_errors || 0;
-}
 sub error_message {
     my ($self) = @_;
     return $self->_error_message;
 }
+sub errors {
+    my ($self) = @_;
+    return $self->_errors || 0;
+}
 sub events {
-    return _read_events(sub {
+    return _events_read(sub {
         my %copy;
         for my $id (keys %events) {
             next if $id =~ /^_/;
@@ -137,25 +115,6 @@ sub events {
         return \%copy;
     });
 }
-
-# Internal: return the IPC::Shareable knot for %events so test code
-# can inspect semaphore state directly.
-sub _events_knot {
-    return tied(%events);
-}
-
-# Internal: test-accessors for shared metadata keys. Coderefs run
-# inside _read_events so they can see the module's lexical %events.
-sub _events_count {
-    return _read_events(sub { $events{_event_count} || 0 });
-}
-sub _events_next_id {
-    return _read_events(sub { $events{_id_counter} || 0 });
-}
-sub _events_stop_requested {
-    my ($self) = @_;
-    return _read_events(sub { $events{$self->id}{_stop_requested} });
-}
 sub id {
     my ($self, $id) = @_;
     $self->{id} = $id if defined $id;
@@ -163,37 +122,13 @@ sub id {
 }
 sub info {
     my ($self) = @_;
-    return _read_events(sub {
+    return _events_read(sub {
         my $event = $events{$self->id} or return undef;
         my %copy = %$event;
         $copy{shared_scalars} = [ @{ $copy{shared_scalars} } ]
             if $copy{shared_scalars};
         return \%copy;
     });
-}
-sub interval {
-    my ($self, $interval) = @_;
-
-    if (defined $interval) {
-        if ($interval !~ /^\d+$/ && $interval !~ /^(\d+)?\.\d+$/) {
-            croak "\$interval must be an integer or float";
-        }
-        _write_events(sub { $events{$self->id}{interval} = $interval });
-    }
-
-    return _read_events(sub { $events{$self->id}->{interval} });
-}
-sub timeout {
-    my ($self, $timeout) = @_;
-
-    if (@_ > 1) {
-        if (defined $timeout && $timeout !~ /^\d+$/) {
-            croak "\$timeout must be a positive integer or undef";
-        }
-        _write_events(sub { $events{$self->id}{timeout} = $timeout });
-    }
-
-    return _read_events(sub { $events{$self->id}->{timeout} });
 }
 sub immediate {
     my ($self, $value) = @_;
@@ -202,12 +137,23 @@ sub immediate {
         if (defined $value && $value !~ /^\d+$/) {
             croak "\$value must be a positive integer or undef";
         }
-        _write_events(sub { $events{$self->id}{immediate} = $value });
+        _events_write(sub { $events{$self->id}{immediate} = $value });
     }
 
-    return _read_events(sub { $events{$self->id}{immediate} });
+    return _events_read(sub { $events{$self->id}{immediate} });
 }
+sub interval {
+    my ($self, $interval) = @_;
 
+    if (defined $interval) {
+        if ($interval !~ /^\d+$/ && $interval !~ /^(\d+)?\.\d+$/) {
+            croak "\$interval must be an integer or float";
+        }
+        _events_write(sub { $events{$self->id}{interval} = $interval });
+    }
+
+    return _events_read(sub { $events{$self->id}->{interval} });
+}
 sub pid {
     my ($self) = @_;
     return $self->_pid;
@@ -223,7 +169,7 @@ sub shared_scalar {
     my $unique_shm_key_found = 0;
     my $scalar;
 
-    _write_events(sub {
+    _events_write(sub {
         for (0..9) {
             $shm_key = _rand_shm_key();
             my $existing = $events{$self->id}{shared_scalars} || [];
@@ -258,7 +204,7 @@ sub start {
         return;
     }
     $self->_crashed(0);
-    _write_events(sub { delete $events{$self->id}{_stop_requested} });
+    _events_write(sub { delete $events{$self->id}{_stop_requested} });
     $self->_started(1);
     $self->_event(@callback_params);
 }
@@ -287,7 +233,7 @@ sub stop {
     # Set cooperative stop flag so a well-behaved child exits its
     # event loop on the next iteration. The signals below act as a
     # safety net for children stuck in a long-running callback.
-    _write_events(sub { $events{$self->id}{_stop_requested} = 1 });
+    _events_write(sub { $events{$self->id}{_stop_requested} = 1 });
 
     # Try graceful SIGTERM first so a user-installed SIGTERM handler in
     # the callback can do cleanup (close files, release locks, etc.).
@@ -303,11 +249,25 @@ sub stop {
           "(SIGTERM + SIGKILL both ignored). This is a fatal event. " .
           "Exiting...\n";
 }
+sub timeout {
+    my ($self, $timeout) = @_;
+
+    if (@_ > 1) {
+        if (defined $timeout && $timeout !~ /^\d+$/) {
+            croak "\$timeout must be a positive integer or undef";
+        }
+        _events_write(sub { $events{$self->id}{timeout} = $timeout });
+    }
+
+    return _events_read(sub { $events{$self->id}->{timeout} });
+}
 sub waiting {
     my ($self) = @_;
     return 1 if $self->error || ! $self->status;
     return 0;
 }
+
+# Internal methods
 
 sub _args {
     my ($self, $args) = @_;
@@ -350,16 +310,16 @@ sub _detect_crash {
 sub _errors {
     my ($self, $increment) = @_;
     if (defined $increment) {
-        _write_events(sub { $events{$self->id}->{errors}++ });
+        _events_write(sub { $events{$self->id}->{errors}++ });
     }
-    return _read_events(sub { $events{$self->id}->{errors} });
+    return _events_read(sub { $events{$self->id}->{errors} });
 }
 sub _error_message {
     my ($self, $msg) = @_;
     if (defined $msg) {
-        _write_events(sub { $events{$self->id}->{error_message} = $msg });
+        _events_write(sub { $events{$self->id}->{error_message} = $msg });
     }
-    return _read_events(sub { $events{$self->id}->{error_message} });
+    return _events_read(sub { $events{$self->id}->{error_message} });
 }
 sub _event {
     my ($self, @event_params) = @_;
@@ -394,7 +354,7 @@ sub _event {
             eval {
                 my $ran_immediate;
                 while (1) {
-                    if (_read_events(sub { $events{$self->id}{_stop_requested} })) {
+                    if (_events_read(sub { $events{$self->id}{_stop_requested} })) {
                         last;
                     }
 
@@ -415,6 +375,60 @@ sub _event {
             $self->_pm->finish($@ ? 1 : 0);
         }
     }
+}
+sub _events_write {
+    my ($cb) = @_;
+    my $knot = tied(%events);
+    return $cb->() unless $knot;
+
+    my $r;
+    $knot->lock(LOCK_EX, sub {
+        $r = $cb->();
+    });
+    return $r;
+}
+sub _events_read {
+    my ($cb) = @_;
+    my $knot = tied(%events);
+    return $cb->() unless $knot;
+
+    $knot->lock(LOCK_SH);
+    my $r;
+    my $ok = eval { $r = $cb->(); 1 };
+    my $err = $@;
+    $knot->unlock;
+    die $err if !$ok;
+    return $r;
+}
+sub _pm {
+    my ($self) = @_;
+
+    if (! exists $self->{pm}) {
+        $self->{pm} = Parallel::ForkManager->new(1);
+    }
+
+    return $self->{pm};
+}
+sub _pid {
+    my ($self, $pid) = @_;
+    if (defined $pid) {
+        $self->{pid} = $pid;
+        _events_write(sub { $events{$self->id}->{pid} = $self->{pid} });
+    }
+    return $self->{pid} || undef;
+}
+sub _rand_shm_key {
+    return sprintf('0x%x', int(rand(0x7FFFFFFF)));
+}
+sub _rand_shm_lock {
+    # Used for the 'protected' option in the %events hash creation.
+    #
+    # IPC::Shareable 1.14+ persists 'protected' in a semaphore slot
+    # (SEM_PROTECTED), which the system caps at semvmx (typically
+    # 0..32767, and 0 means "unprotected"). Derive a stable, in-range
+    # value from $$ so a forked subprocess inherits the same key.
+
+    return 1 + ($$ % 32767);
 }
 sub _run_callback {
     my ($self, @params) = @_;
@@ -465,42 +479,12 @@ sub _run_callback {
     $self->_runs(1);
     $self->status;
 }
-sub _pm {
-    my ($self) = @_;
-
-    if (! exists $self->{pm}) {
-        $self->{pm} = Parallel::ForkManager->new(1);
-    }
-
-    return $self->{pm};
-}
-sub _pid {
-    my ($self, $pid) = @_;
-    if (defined $pid) {
-        $self->{pid} = $pid;
-        _write_events(sub { $events{$self->id}->{pid} = $self->{pid} });
-    }
-    return $self->{pid} || undef;
-}
-sub _rand_shm_key {
-    return sprintf('0x%x', int(rand(0x7FFFFFFF)));
-}
-sub _rand_shm_lock {
-    # Used for the 'protected' option in the %events hash creation.
-    #
-    # IPC::Shareable 1.14+ persists 'protected' in a semaphore slot
-    # (SEM_PROTECTED), which the system caps at semvmx (typically
-    # 0..32767, and 0 means "unprotected"). Derive a stable, in-range
-    # value from $$ so a forked subprocess inherits the same key.
-
-    return 1 + ($$ % 32767);
-}
 sub _runs {
     my ($self, $increment) = @_;
     if (defined $increment) {
-        _write_events(sub { $events{$self->id}->{runs}++ });
+        _events_write(sub { $events{$self->id}->{runs}++ });
     }
-    return _read_events(sub { $events{$self->id}->{runs} });
+    return _events_read(sub { $events{$self->id}->{runs} });
 }
 sub _setup {
     my ($self, $interval, $cb, @args) = @_;
@@ -529,6 +513,42 @@ sub _started {
     my ($self, $started) = @_;
     $self->{started} = $started if defined $started;
     return $self->{started};
+}
+
+# External access: These allow unit tests to directly access the %events hash
+
+sub _events_knot {
+    # The IPC::Shareable knot itself
+    return tied(%events);
+}
+sub _events_count {
+    # Number of events currently alive
+    return _events_read(sub { $events{_event_count} || 0 });
+}
+sub _events_next_id {
+    return _events_read(sub { $events{_id_counter} || 0 });
+}
+sub _events_stop_requested {
+    my ($self) = @_;
+    return _events_read(sub { $events{$self->id}{_stop_requested} });
+}
+
+# Destruction
+
+sub _end {
+    # Guard against deadlocking forever on _events_read' LOCK_SH if a
+    # crashed/stuck peer still holds LOCK_EX on the events knot. Bail
+    # out after END_LOCK_TIMEOUT seconds and let the process exit.
+
+    eval {
+        local $SIG{ALRM} = sub { die "alarm\n" };
+        alarm(END_LOCK_TIMEOUT);
+        if (! _events_read(sub { $events{_event_count} || 0 })
+            && $creator_pid == $$) {
+            IPC::Shareable::clean_up_protected(_shm_lock());
+        }
+        alarm(0);
+    };
 }
 sub DESTROY {
     my $self = $_[0];
@@ -561,29 +581,15 @@ sub DESTROY {
         }
     }
 
-    _write_events(sub {
+    _events_write(sub {
         delete $events{$self->id};
         $events{_event_count}--;
     });
 }
-sub _end {
-    # Guard against deadlocking forever on _read_events' LOCK_SH if a
-    # crashed/stuck peer still holds LOCK_EX on the events knot. Bail
-    # out after END_LOCK_TIMEOUT seconds and let the process exit.
-
-    eval {
-        local $SIG{ALRM} = sub { die "alarm\n" };
-        alarm(END_LOCK_TIMEOUT);
-        if (! _read_events(sub { $events{_event_count} || 0 })
-            && $creator_pid == $$) {
-            IPC::Shareable::clean_up_protected(_shm_lock());
-        }
-        alarm(0);
-    };
-}
 END {
     _end();
 }
+
 sub _vim{}
 
 1;

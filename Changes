@@ -20,8 +20,8 @@ Revision history for Async-Event-Interval
     - %events bootstrap loop is now capped at SHM_CREATE_RETRIES (100)
       attempts and croaks with the last underlying error instead of
       spinning forever when shmget fails persistently
-    - All reads/writes to %events now go through _read_events (LOCK_SH) /
-      _write_events (LOCK_EX) to synchronize access across processes
+    - All reads/writes to %events now go through _events_read (LOCK_SH) /
+      _events_write (LOCK_EX) to synchronize access across processes
     - events() now returns a read-locked deep copy snapshot; mutations to
       the returned hashref do not affect the live %events
     - info() now returns a shallow copy snapshot, consistent with events()
@@ -47,7 +47,7 @@ Revision history for Async-Event-Interval
       _pm->finish($@ ? 1 : 0) so ForkManager isn't left with a stale
       child record when the callback dies
     - Guard _end() with a local SIGALRM (END_LOCK_TIMEOUT, default 2s)
-      so process exit doesn't block forever on _read_events' LOCK_SH if
+      so process exit doesn't block forever on _events_read' LOCK_SH if
       a peer still holds LOCK_EX on the events knot
     - stop() now polls kill(0) at STOP_KILL_POLL_INTERVAL (0.05s) for up
       to STOP_KILL_TIMEOUT (1s) instead of always sleeping a fixed 1s;

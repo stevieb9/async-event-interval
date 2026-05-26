@@ -27,3 +27,4 @@ cover_db/
 .aider*
 _Inline/
 ci/
+/*.md

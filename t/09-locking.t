@@ -34,8 +34,8 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 {
     can_ok 'Async::Event::Interval', 'LOCK_EX';
     can_ok 'Async::Event::Interval', 'LOCK_SH';
-    can_ok 'Async::Event::Interval', '_write_events';
-    can_ok 'Async::Event::Interval', '_read_events';
+    can_ok 'Async::Event::Interval', '_events_write';
+    can_ok 'Async::Event::Interval', '_events_read';
 }
 
 # _write_events runs its coderef under LOCK_EX (SEM_WRITERS goes to 1
@@ -48,7 +48,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         "SEM_WRITERS is 0 before _write_events";
 
     my $writers_during;
-    my $rv = Async::Event::Interval::_write_events(sub {
+    my $rv = Async::Event::Interval::_events_write(sub {
         $writers_during = $knot->sem->getval(SEM_WRITERS);
         return 'wrote';
     });
@@ -73,7 +73,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         "SEM_READERS is 0 before _read_events";
 
     my $readers_during;
-    my $rv = Async::Event::Interval::_read_events(sub {
+    my $rv = Async::Event::Interval::_events_read(sub {
         $readers_during = $knot->sem->getval(SEM_READERS);
         return 'read';
     });
@@ -94,7 +94,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     my $knot = events_knot;
 
     my $ok = eval {
-        Async::Event::Interval::_write_events(sub { die "boom-write\n" });
+        Async::Event::Interval::_events_write(sub { die "boom-write\n" });
         1;
     };
     is $ok, undef, "_write_events propagates die from its coderef";
@@ -103,7 +103,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         "_write_events released LOCK_EX even on die";
 
     $ok = eval {
-        Async::Event::Interval::_read_events(sub { die "boom-read\n" });
+        Async::Event::Interval::_events_read(sub { die "boom-read\n" });
         1;
     };
     is $ok, undef, "_read_events propagates die from its coderef";
@@ -117,7 +117,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 
 {
     no warnings 'redefine';
-    local *Async::Event::Interval::_write_events = sub {
+    local *Async::Event::Interval::_events_write = sub {
         my ($cb) = @_;
         my $knot = Async::Event::Interval::_events_knot();
         # Simulate teardown by ignoring the knot
@@ -126,7 +126,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         return 'never';
     };
     is
-        Async::Event::Interval::_write_events(sub { 'fallback' }),
+        Async::Event::Interval::_events_write(sub { 'fallback' }),
         'fallback',
         "_write_events falls back to running the coderef when no knot is available";
 }
@@ -224,7 +224,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 
     use Time::HiRes ();
     my $t0 = Time::HiRes::time();
-    Async::Event::Interval::_read_events(sub { 1 });
+    Async::Event::Interval::_events_read(sub { 1 });
     my $elapsed = Time::HiRes::time() - $t0;
 
     cmp_ok $elapsed, '>=', 0.1,
@@ -239,9 +239,9 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 
 {
     my $write_count = 0;
-    my $orig = \&Async::Event::Interval::_write_events;
+    my $orig = \&Async::Event::Interval::_events_write;
     no warnings 'redefine';
-    local *Async::Event::Interval::_write_events = sub {
+    local *Async::Event::Interval::_events_write = sub {
         $write_count++;
         $orig->(@_);
     };
@@ -262,9 +262,9 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 
 {
     my $read_count = 0;
-    my $orig = \&Async::Event::Interval::_read_events;
+    my $orig = \&Async::Event::Interval::_events_read;
     no warnings 'redefine';
-    local *Async::Event::Interval::_read_events = sub {
+    local *Async::Event::Interval::_events_read = sub {
         $read_count++;
         $orig->(@_);
     };
@@ -296,9 +296,9 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 
 {
     my $write_count = 0;
-    my $orig = \&Async::Event::Interval::_write_events;
+    my $orig = \&Async::Event::Interval::_events_write;
     no warnings 'redefine';
-    local *Async::Event::Interval::_write_events = sub {
+    local *Async::Event::Interval::_events_write = sub {
         $write_count++;
         $orig->(@_);
     };
@@ -365,9 +365,9 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 
 {
     my $write_count = 0;
-    my $orig = \&Async::Event::Interval::_write_events;
+    my $orig = \&Async::Event::Interval::_events_write;
     no warnings 'redefine';
-    local *Async::Event::Interval::_write_events = sub {
+    local *Async::Event::Interval::_events_write = sub {
         $write_count++;
         $orig->(@_);
     };
@@ -392,7 +392,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 
 {
     no warnings 'redefine';
-    local *Async::Event::Interval::_read_events = sub {
+    local *Async::Event::Interval::_events_read = sub {
         my ($cb) = @_;
         my $knot = Async::Event::Interval::_events_knot();
         $knot = undef;
@@ -400,7 +400,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         return 'never';
     };
     is
-        Async::Event::Interval::_read_events(sub { 'fallback' }),
+        Async::Event::Interval::_events_read(sub { 'fallback' }),
         'fallback',
         "_read_events falls back to running the coderef when no knot is available";
 }
@@ -754,9 +754,9 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 
 {
     my $read_count = 0;
-    my $orig = \&Async::Event::Interval::_read_events;
+    my $orig = \&Async::Event::Interval::_events_read;
     no warnings 'redefine';
-    local *Async::Event::Interval::_read_events = sub {
+    local *Async::Event::Interval::_events_read = sub {
         $read_count++;
         $orig->(@_);
     };
@@ -779,11 +779,11 @@ sub events_knot { Async::Event::Interval::_events_knot() }
 {
     my $write_count = 0;
     my $read_count  = 0;
-    my $orig_write = \&Async::Event::Interval::_write_events;
-    my $orig_read  = \&Async::Event::Interval::_read_events;
+    my $orig_write = \&Async::Event::Interval::_events_write;
+    my $orig_read  = \&Async::Event::Interval::_events_read;
     no warnings 'redefine';
-    local *Async::Event::Interval::_write_events = sub { $write_count++; $orig_write->(@_) };
-    local *Async::Event::Interval::_read_events  = sub { $read_count++; $orig_read->(@_) };
+    local *Async::Event::Interval::_events_write = sub { $write_count++; $orig_write->(@_) };
+    local *Async::Event::Interval::_events_read  = sub { $read_count++; $orig_read->(@_) };
 
     my $e = Async::Event::Interval->new(0.5, sub {});
     $write_count = 0;
