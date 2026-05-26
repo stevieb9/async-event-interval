@@ -30,45 +30,16 @@ use constant {
 
 $SIG{CHLD} = 'IGNORE';
 
-my %events;
-my $shared_memory_protect_lock = _rand_shm_lock();
-
-_create_events_segment();
-
-my $creator_pid = $$;
-
-sub _create_events_segment {
-    my $created;
-    my $tries = 0;
-
-    while (! $created) {
-        if ($tries++ >= SHM_CREATE_RETRIES) {
-            croak
-                "Unable to create the %events shared memory segment after "
-              . SHM_CREATE_RETRIES
-              . " attempts: $@";
-        }
-
-        $created = eval {
-            tie %events, 'IPC::Shareable', {
-                key         => _rand_shm_key(),
-                create      => 1,
-                exclusive   => 1,
-                protected   => _shm_lock(),
-                mode        => 0600,
-                destroy     => 1
-            };
-            1;
-        };
-    }
-
-    return $created;
-}
-
-*restart = \&start;
-
 # Every access to the %events has MUST go through _events_read() and
 # _events_write(). See the example in new() for how they are used.
+
+my %events;
+
+my $shared_memory_protect_lock = _rand_shm_lock();
+_create_events_segment();
+my $creator_pid = $$;
+
+*restart = \&start;
 
 sub new {
     my $self = bless {}, shift;
@@ -293,6 +264,33 @@ sub _crashed {
     $self->{crashed} = $crashed ? 1 : 0 if defined $crashed;
     return $self->{crashed} ? 1 : 0;
 }
+sub _create_events_segment {
+    my $created;
+    my $tries = 0;
+
+    while (! $created) {
+        if ($tries++ >= SHM_CREATE_RETRIES) {
+            croak
+                "Unable to create the %events shared memory segment after "
+                    . SHM_CREATE_RETRIES
+                    . " attempts: $@";
+        }
+
+        $created = eval {
+            tie %events, 'IPC::Shareable', {
+                key         => _rand_shm_key(),
+                create      => 1,
+                exclusive   => 1,
+                protected   => _shm_lock(),
+                mode        => 0600,
+                destroy     => 1
+            };
+            1;
+        };
+    }
+
+    return $created;
+}
 sub _detect_crash {
     my ($self) = @_;
 
@@ -515,7 +513,8 @@ sub _started {
     return $self->{started};
 }
 
-# External access: These allow unit tests to directly access the %events hash
+# External access: These allow unit tests to directly access live data in the
+# %events hash
 
 sub _events_knot {
     # The IPC::Shareable knot itself
