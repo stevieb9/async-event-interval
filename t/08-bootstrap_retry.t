@@ -37,13 +37,13 @@ is
     });
 
     my $ok = eval {
-        Async::Event::Interval::_create_events_seg();
+        Async::Event::Interval::_create_events_segment();
         1;
     };
 
-    ok $ok, "_create_events_seg() returns without croaking when key is unique";
+    ok $ok, "_create_events_segment() returns without croaking when key is unique";
     is $rand_key->called_count, 1,
-        "_create_events_seg() calls _rand_shm_key() exactly once on success";
+        "_create_events_segment() calls _rand_shm_key() exactly once on success";
 
     $rand_key->unmock;
 }
@@ -70,13 +70,13 @@ is
     $rand_key->return_value($blocker_key);
 
     my $ok = eval {
-        Async::Event::Interval::_create_events_seg();
+        Async::Event::Interval::_create_events_segment();
         1;
     };
 
     my $err = $@;
 
-    is $ok, undef, "_create_events_seg() croaks when every attempt collides";
+    is $ok, undef, "_create_events_segment() croaks when every attempt collides";
 
     like
         $err,
@@ -127,7 +127,7 @@ is
     $rand_key->return_value($blocker_key);
 
     my $ok = eval {
-        Async::Event::Interval::_create_events_seg();
+        Async::Event::Interval::_create_events_segment();
         1;
     };
 
