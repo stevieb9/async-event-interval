@@ -1,0 +1,263 @@
+#!/bin/sh
+# Run Async::Event::Interval tests in a local OpenBSD VM (Lima/QEMU).
+#
+# Targets the CPAN smoker platform:
+#   osname=openbsd, osvers=7.8, archname=OpenBSD.amd64-openbsd
+#
+# Uses the generic/openbsd7 Vagrant box (Roboxes) as the base image.
+# The QCOW2 is extracted once and cached at ~/.lima/_cache/openbsd7.qcow2.
+#
+# Usage: ./ci/openbsd-test.sh [prove options]
+
+set -e
+
+VM="${VM:-openbsd-ipc}"
+HOST_REPO="$(cd "$(dirname "$0")/.." && pwd)"
+GUEST_USER="vagrant"
+GUEST_HOME="/home/${GUEST_USER}"
+GUEST_REPO="${GUEST_HOME}/async-event-interval"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CACHE_DIR="${HOME}/.lima/_cache"
+CACHED_QCOW2="${CACHE_DIR}/openbsd7.qcow2"
+
+BOX_URL="https://vagrantcloud.com/generic/boxes/openbsd7/versions/4.3.12/providers/qemu/amd64/vagrant.box"
+BOX_CHECKSUM="d7049b92338162c552c147f4647dc3ee44546b7dc44e7e9c4652ae332c06aad1"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [options] [prove options]
+
+Options:
+  -h, --help    Show this help message and exit
+
+Environment:
+  VM=<name>     Target a different Lima VM (default: openbsd-ipc)
+
+Prove options default to "-v t" (verbose, full suite) when not supplied.
+Examples:
+  $(basename "$0")                       # full suite
+  $(basename "$0") t/15-interval.t       # single test file
+  $(basename "$0") t                     # full suite, no -v
+EOF
+}
+
+_PROVE_ARGS=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help)    usage; exit 0 ;;
+        *)            _PROVE_ARGS="${_PROVE_ARGS} $1"; shift ;;
+    esac
+done
+PROVE_ARGS="${_PROVE_ARGS# }"
+PROVE_ARGS="${PROVE_ARGS:--v t}"
+
+cleanup() {
+    status=$?
+    echo "==> Stopping VM '${VM}'..."
+
+    # Try clean SSH shutdown first (avoids fsck on next boot)
+    ssh -o ConnectTimeout=5 -F ~/.lima/"$VM"/ssh.config lima-"$VM" \
+        'doas shutdown -h now' </dev/null 2>/dev/null || true
+
+    # Wait for VM to power off
+    _clean_shutdown=0
+    for _i in $(seq 1 12); do
+        limactl list 2>/dev/null | grep -q "^${VM}[[:space:]].*Running" || {
+            _clean_shutdown=1; break; }
+        sleep 5
+    done
+
+    # If still running, try limactl stop (ACPI) then force-stop
+    if [ "$_clean_shutdown" -eq 0 ]; then
+        echo "==> VM still running, trying Lima stop..."
+        limactl stop "$VM" >/dev/null 2>&1 || true
+        for _i in $(seq 1 6); do
+            limactl list 2>/dev/null | grep -q "^${VM}[[:space:]].*Running" || {
+                _clean_shutdown=1; break; }
+            sleep 5
+        done
+    fi
+    if [ "$_clean_shutdown" -eq 0 ]; then
+        echo "==> Force-stopping VM..."
+        limactl stop --force "$VM" >/dev/null 2>&1 || true
+    fi
+
+    # Save clean QCOW2 snapshot for fast recovery next run
+    if [ "$_clean_shutdown" -eq 1 ]; then
+        _DISK="${HOME}/.lima/${VM}/disk"
+        echo "==> Saving clean VM snapshot..."
+        qemu-img snapshot -c clean "$_DISK" 2>/dev/null || true
+    fi
+
+    trap - EXIT INT TERM
+    exit "$status"
+}
+
+trap cleanup EXIT INT TERM
+
+# ── one-time: download Vagrant box and extract QCOW2 ────────────────────────
+
+if [ ! -f "$CACHED_QCOW2" ]; then
+    echo "==> Downloading generic/openbsd7 Vagrant box (one-time)..."
+    mkdir -p "$CACHE_DIR"
+    BOX_TMP="/tmp/openbsd7-vagrant.box"
+    curl -fsSL -o "$BOX_TMP" "$BOX_URL"
+
+    # Verify checksum
+    ACTUAL=$( (shasum -a 256 "$BOX_TMP" 2>/dev/null || sha256sum "$BOX_TMP" 2>/dev/null) | awk '{print $1}')
+    if [ -n "$ACTUAL" ] && [ "$ACTUAL" != "$BOX_CHECKSUM" ]; then
+        echo "WARNING: checksum mismatch (expected ${BOX_CHECKSUM}, got ${ACTUAL})"
+    fi
+
+    echo "==> Extracting QCOW2 from Vagrant box..."
+    EXTRACT_DIR="/tmp/openbsd7-extract"
+    rm -rf "$EXTRACT_DIR"
+    mkdir -p "$EXTRACT_DIR"
+    tar xzf "$BOX_TMP" -C "$EXTRACT_DIR" box.img
+
+    # Convert to a compact QCOW2 (the box.img is already QCOW2; copy and
+    # shrink to save space).
+    echo "==> Optimising QCOW2 image..."
+    qemu-img convert -O qcow2 -c "$EXTRACT_DIR/box.img" "$CACHED_QCOW2" 2>/dev/null \
+        || cp "$EXTRACT_DIR/box.img" "$CACHED_QCOW2"
+
+    rm -f "$BOX_TMP"
+    rm -rf "$EXTRACT_DIR"
+    echo "==> QCOW2 cached at ${CACHED_QCOW2}"
+fi
+
+# ── create VM if it doesn't exist ───────────────────────────────────────────
+
+if ! limactl list 2>/dev/null | awk '{print $1}' | grep -qx "$VM"; then
+    echo "==> Creating VM '${VM}' from Lima template..."
+    limactl create --name "$VM" --tty=false "${SCRIPT_DIR}/openbsd-lima.yaml"
+fi
+
+# ── first-boot setup (one-time, requires direct QEMU for serial console) ──
+
+_FB_SENTINEL="${HOME}/.lima/${VM}/.first-boot-done"
+
+if [ ! -f "$_FB_SENTINEL" ]; then
+    echo "==> First-boot setup (one-time)..."
+
+    # Ensure any previous Lima-managed QEMU is stopped so our direct QEMU
+    # can use the disk.
+    limactl stop --force "$VM" >/dev/null 2>&1 || true
+    # Lima deletes socket files on stop; recreate the cidata.iso which
+    # Lima creates on create.  We need Lima's ssh.config for the instance
+    # ID extraction.
+    if [ ! -f "${HOME}/.lima/${VM}/cidata.iso" ]; then
+        echo "ERROR: cidata.iso not found; VM may not have been created"
+        exit 1
+    fi
+
+    python3 "${SCRIPT_DIR}/openbsd-first-boot.py" "$VM"
+    touch "$_FB_SENTINEL"
+
+    # Take initial clean snapshot after first-boot (VM was halted cleanly)
+    _DISK="${HOME}/.lima/${VM}/disk"
+    qemu-img snapshot -c clean "$_DISK" 2>/dev/null || true
+
+    echo "==> First-boot setup complete."
+fi
+
+# ── start VM ────────────────────────────────────────────────────────────────
+
+if ! limactl list | grep -q "^${VM}[[:space:]].*Running"; then
+    _DISK="${HOME}/.lima/${VM}/disk"
+
+    # Revert to last clean snapshot so fsck never runs on boot
+    if qemu-img snapshot -l "$_DISK" 2>/dev/null | grep -q '\bclean\b'; then
+        echo "==> Reverting to clean snapshot..."
+        qemu-img snapshot -a clean "$_DISK" 2>/dev/null || true
+    fi
+
+    echo "==> Starting VM '${VM}'..."
+    limactl start "$VM" &
+    _LIMA_PID=$!
+
+    # Monitor serial log for boot progress (fsck can be slow on TCG)
+    _SERIAL_LOG="${HOME}/.lima/${VM}/serial.log"
+    _FS_WARNED=0
+    _ELAPSED=0
+    echo "==> Waiting for VM to be ready..."
+    while kill -0 $_LIMA_PID 2>/dev/null; do
+        sleep 10
+        _ELAPSED=$(( _ELAPSED + 10 ))
+        if [ "$_FS_WARNED" = "0" ] && [ -f "$_SERIAL_LOG" ] \
+            && grep -q 'fsck' "$_SERIAL_LOG" 2>/dev/null
+        then
+            echo "    ...fsck in progress (unclean shutdown); this may take a while on TCG"
+            _FS_WARNED=1
+        fi
+        [ $(( _ELAPSED % 60 )) -eq 0 ] && \
+            printf "    ...%d min elapsed\n" $(( _ELAPSED / 60 ))
+    done
+    wait "$_LIMA_PID" 2>/dev/null
+
+    limactl list | grep -q "^${VM}[[:space:]].*Running" || {
+        echo "ERROR: VM '${VM}' is not Running after start"; exit 1; }
+fi
+
+# ── install Perl dependencies ───────────────────────────────────────────────
+
+echo "==> Installing Perl dependencies via CPAN (OpenBSD 7.4 packages offline)..."
+limactl shell "$VM" -- sh -lc '
+    sudo cpan -T Test::SharedFork Mock::Sub Parallel::ForkManager 2>&1
+
+    # IPC::Shareable: install from GitHub because OpenBSD 7.4 tar(1)
+    # cannot handle PAX extended headers in modern CPAN tarballs.
+    # Async::Event::Interval requires >= 1.14 and there is no OpenBSD
+    # pkg to lean on here.
+    IPC_URL="https://github.com/stevieb9/ipc-shareable/archive/refs/heads/master.zip"
+    IPC_DIR="/tmp/ipc-shareable-install"
+    rm -rf "$IPC_DIR" /tmp/ipc-shareable-master
+    mkdir -p "$IPC_DIR"
+    curl -fsSL -o "$IPC_DIR/master.zip" "$IPC_URL"
+    unzip -qo "$IPC_DIR/master.zip" -d /tmp
+    cd /tmp/ipc-shareable-master
+    sudo perl Makefile.PL 2>&1
+    sudo make 2>&1
+    sudo make install 2>&1
+    rm -rf "$IPC_DIR" /tmp/ipc-shareable-master
+'
+
+# ── clean up stale IPC from previous runs ────────────────────────────────────
+
+echo "==> Cleaning up stale IPC segments/semaphores from previous runs..."
+limactl shell "$VM" -- sh -lc "
+    for id in \$(ipcs -m 2>/dev/null | awk '/${GUEST_USER}/ {print \$2}'); do
+        ipcrm -m \$id 2>/dev/null || true
+    done
+    for id in \$(ipcs -s 2>/dev/null | awk '/${GUEST_USER}/ {print \$2}'); do
+        ipcrm -s \$id 2>/dev/null || true
+    done
+" || true
+
+# ── copy source into VM ─────────────────────────────────────────────────────
+
+echo "==> Copying source into VM..."
+limactl shell "$VM" -- sh -lc "rm -rf '${GUEST_REPO}'"
+scp -F ~/.lima/"$VM"/ssh.config -r "$HOST_REPO" "lima-${VM}:${GUEST_HOME}/"
+# Strip macOS resource-fork files (._*).
+limactl shell "$VM" -- sh -lc "find '${GUEST_REPO}' -name '._*' -delete" \
+    2>/dev/null || true
+
+# ── run tests ───────────────────────────────────────────────────────────────
+
+_test_rc=0
+echo "==> Running tests in VM..."
+limactl shell "$VM" -- sh -lc \
+    "cd '${GUEST_REPO}' && PERL5LIB=lib prove -l ${PROVE_ARGS}" \
+    || _test_rc=$?
+
+echo "==> Async::Event::Interval version tested..."
+limactl shell "$VM" -- sh -lc "cd '${GUEST_REPO}' && perl -Ilib -MAsync::Event::Interval -e 'print qq(Async::Event::Interval \$Async::Event::Interval::VERSION\n)'"
+echo "==> IPC::Shareable version tested..."
+limactl shell "$VM" -- sh -lc "cd '${GUEST_REPO}' && perl -Ilib -MIPC::Shareable -e 'print qq(IPC::Shareable \$IPC::Shareable::VERSION\n)'"
+
+echo "==> VM environment info..."
+limactl shell "$VM" -- sh -lc "uname -a; perl -v | head -2; perl -V:archname"
+
+exit $_test_rc

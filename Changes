@@ -80,6 +80,7 @@ Revision history for Async-Event-Interval
     - Adopt IPC::Shareable's testing_set/clean_up_testing API to brand all
       test-suite segments and purge orphans from prior crashed runs; bump
       IPC::Shareable prereq to 1.15
+    - Fixes and enhancements to the local VM test infrastructure
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()
