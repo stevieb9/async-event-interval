@@ -35,6 +35,7 @@ WriteMakefile(
     PREREQ_PM => {
         'IPC::Shareable'        => '1.15',
         'Parallel::ForkManager' => ($] < 5.014 ? '== 2.02' : 0),
+        'Time::HiRes'           => 0,
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean => { FILES => 'Async-Event-Interval-*' },

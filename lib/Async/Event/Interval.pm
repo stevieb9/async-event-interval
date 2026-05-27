@@ -10,6 +10,7 @@ use Data::Dumper;
 use IPC::Shareable qw(:lock);
 use Parallel::ForkManager;
 use POSIX ();
+use Time::HiRes ();
 
 use constant {
     # Number of tries to create the %events cache
@@ -498,11 +499,10 @@ sub _signal_and_wait {
 
     kill $sig, $self->pid;
 
-    my $waited = 0;
+    my $start = Time::HiRes::time();
     while (kill 0, $self->pid) {
-        return 0 if $waited >= $timeout;
+        return 0 if Time::HiRes::time() - $start >= $timeout;
         select(undef, undef, undef, STOP_KILL_POLL_INTERVAL);
-        $waited += STOP_KILL_POLL_INTERVAL;
     }
 
     return 1;

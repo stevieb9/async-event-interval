@@ -87,6 +87,8 @@ Revision history for Async-Event-Interval
       failure to prevent EAGAIN from IPC::Shareable's unlock() leaking
       IPC segments on Linux
     - Ensure counters are properly cleaned up in _end() cleanup
+    - Use Time::HiRes wall-clock time in _signal_and_wait so stop() timeout
+      is accurate on busy/VM systems where select() jitter accumulates
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()

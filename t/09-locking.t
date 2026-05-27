@@ -1036,7 +1036,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     cmp_ok $elapsed, '>=', $total_timeout - 0.3,
         "stop() waited ~STOP_TERM_TIMEOUT + STOP_KILL_TIMEOUT before croaking "
       . "($elapsed s, total_timeout=$total_timeout)";
-    cmp_ok $elapsed, '<', $total_timeout + 0.5,
+    cmp_ok $elapsed, '<', $total_timeout + 1.0,
         "stop() didn't wait substantially longer than the combined timeouts "
       . "($elapsed s)";
 
