@@ -148,7 +148,11 @@ use Async::Event::Interval;
     });
     $e->timeout(5);                          # generous, 2s callback completes
     $e->start;
-    select(undef, undef, undef, 2.3);        # let iteration 1 finish
+    my $waited = 0;
+    until ($e->runs >= 1 || $waited >= 10) {
+        select(undef, undef, undef, 0.1);
+        $waited += 0.1;
+    }
     is $e->errors, 0,
         "dynamic timeout: no errors under generous initial timeout";
     cmp_ok $e->runs, '>=', 1,
