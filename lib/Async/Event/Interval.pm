@@ -79,7 +79,12 @@ sub events {
         for my $id (keys %events) {
             next if $id =~ /^_/;
             my $event = $events{$id};
-            $copy{$id} = { %$event };
+            my %filtered;
+            for my $k (keys %$event) {
+                next if $k =~ /^_/;
+                $filtered{$k} = $event->{$k};
+            }
+            $copy{$id} = \%filtered;
             if ($copy{$id}{shared_scalars}) {
                 $copy{$id}{shared_scalars} = [ @{ $copy{$id}{shared_scalars} } ];
             }
@@ -96,7 +101,11 @@ sub info {
     my ($self) = @_;
     return _events_read(sub {
         my $event = $events{$self->id} or return undef;
-        my %copy = %$event;
+        my %copy;
+        for my $k (keys %$event) {
+            next if $k =~ /^_/;
+            $copy{$k} = $event->{$k};
+        }
         $copy{shared_scalars} = [ @{ $copy{shared_scalars} } ]
             if $copy{shared_scalars};
         return \%copy;
@@ -754,6 +763,9 @@ L</restart>.
 Returns true if the event is dormant and is ready for a C<start()> or
 C<restart()> command. Returns false if the event is already running.
 
+B<Side effect>: calls C<error()> and C<status()> internally, both of which
+probe the child process (see those methods for details).
+
 =head2 error
 
 Returns true if an event crashed unexpectedly in the background, and is ready
@@ -1132,6 +1144,12 @@ Here's an example that uses a hash that's stored in shared memory, where the
 parent process (the script) and two other processes (the two events) all share
 and update the same hash.
 
+B<Important>: keep shared hash values flat (strings, numbers). Nested data
+structures (e.g. C<< $hash{$$}{key} >>) cause L<IPC::Shareable> to create
+child shared-memory segments whose ownership can conflict across forked
+processes, leading to data loss. For per-event shared data, consider
+L</shared_scalar> instead.
+
     use Async::Event::Interval;
     use IPC::Shareable;
 
@@ -1141,7 +1159,7 @@ and update the same hash.
         destroy     => 1
     };
 
-    $shared_data{$$}{called_count}++;
+    $shared_data{$$}++;
 
     my $event_one = Async::Event::Interval->new(0.2, \&update);
     my $event_two = Async::Event::Interval->new(1, \&update);
@@ -1158,7 +1176,7 @@ and update the same hash.
         printf(
             "Process ID %d executed %d times\n",
             $pid,
-            $shared_data{$pid}{called_count}
+            $shared_data{$pid}
         );
     }
 
@@ -1179,7 +1197,7 @@ and update the same hash.
         # process ID of the calling event, even though they both call this
         # same function
 
-        $shared_data{$$}{called_count}++;
+        $shared_data{$$}++;
     }
 
 =head2 Immediate first execution
@@ -1195,6 +1213,29 @@ at the regular interval thereafter:
 
     sleep 10;
     $event->stop;
+
+=head2 Closures and lexical variables
+
+When a callback closes over a lexical variable, the child process sees the
+value that existed at the moment of C<fork>. For one-shot events (interval
+C<0>), each C<start()> forks a fresh child, so changes to the lexical
+between calls are visible:
+
+    use Async::Event::Interval;
+
+    my $msg = "first run";
+    my $e = Async::Event::Interval->new(0, sub { print "$msg\n"; });
+
+    $e->start;       # prints "first run"
+    select(undef, undef, undef, 0.3);
+
+    $msg = "second run";
+    $e->start;       # prints "second run"
+
+For interval events (interval > 0), the child is forked once on the first
+C<start()> and loops. Parent-side changes to closed-over lexicals will
+never be seen by the already-running child. Use L</shared_scalar> or
+C<start(@params)> for data that must cross process boundaries mid-run.
 
 =head1 AUTHOR
 
