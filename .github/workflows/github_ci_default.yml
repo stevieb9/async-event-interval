@@ -38,7 +38,7 @@ jobs:
         if: ${{ matrix.coverage }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CI_TESTING: 1
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         run: |
           cpanm -n Devel::Cover::Report::Coveralls
           cover -test -report Coveralls
