@@ -89,6 +89,8 @@ Revision history for Async-Event-Interval
     - Ensure counters are properly cleaned up in _end() cleanup
     - Use Time::HiRes wall-clock time in _signal_and_wait so stop() timeout
       is accurate on busy/VM systems where select() jitter accumulates
+    - Relax t/15-interval.t exact-count timing checks to >= so slow macOS VMs
+      don't fail before the first callback fires
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()
