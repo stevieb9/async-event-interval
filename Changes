@@ -91,6 +91,9 @@ Revision history for Async-Event-Interval
       is accurate on busy/VM systems where select() jitter accumulates
     - Relax t/15-interval.t exact-count timing checks to >= so slow macOS VMs
       don't fail before the first callback fires
+    - _detect_crash no longer marks cleanly-exited one-shot events as
+      crashed; child writes _clean_exit flag to shared %events before
+      finish(0) so the parent can distinguish normal completion from a crash
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()

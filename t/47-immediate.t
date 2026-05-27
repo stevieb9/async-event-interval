@@ -30,7 +30,7 @@ use Time::HiRes ();
     my $ok = eval { $e->immediate(-1); 1 };
     my $err = $@;
     is $ok, undef, "immediate(-1) croaks";
-    like $err, qr/must be a positive integer/, "...with positive requirement message";
+    like $err, qr/must be a non-negative integer/, "...with validation message";
 }
 
 # Non-numeric value croaks.
@@ -39,7 +39,7 @@ use Time::HiRes ();
     my $ok = eval { $e->immediate("abc"); 1 };
     my $err = $@;
     is $ok, undef, "immediate('abc') croaks";
-    like $err, qr/must be a positive integer/, "...with validation message";
+    like $err, qr/must be a non-negative integer/, "...with validation message";
 }
 
 # Empty string croaks.
@@ -48,7 +48,7 @@ use Time::HiRes ();
     my $ok = eval { $e->immediate(""); 1 };
     my $err = $@;
     is $ok, undef, "immediate('') croaks";
-    like $err, qr/must be a positive integer/, "...with validation message";
+    like $err, qr/must be a non-negative integer/, "...with validation message";
 }
 
 # Fractional seconds croak (integer-only, like timeout()).
@@ -57,7 +57,7 @@ use Time::HiRes ();
     my $ok = eval { $e->immediate(0.5); 1 };
     my $err = $@;
     is $ok, undef, "immediate(0.5) croaks";
-    like $err, qr/must be a positive integer/, "...with validation message";
+    like $err, qr/must be a non-negative integer/, "...with validation message";
 }
 
 # immediate(0) disables.

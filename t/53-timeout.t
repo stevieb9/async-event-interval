@@ -30,7 +30,7 @@ use Async::Event::Interval;
     my $ok = eval { $e->timeout(-1); 1 };
     my $err = $@;
     is $ok, undef, "timeout(-1) croaks";
-    like $err, qr/must be a positive/, "...with positive requirement message";
+    like $err, qr/must be a non-negative integer/, "...with validation message";
 }
 
 # Non-numeric value croaks.
@@ -39,7 +39,7 @@ use Async::Event::Interval;
     my $ok = eval { $e->timeout("abc"); 1 };
     my $err = $@;
     is $ok, undef, "timeout('abc') croaks";
-    like $err, qr/must be a positive integer/,
+    like $err, qr/must be a non-negative integer/,
         "...with validation message";
 }
 
@@ -50,7 +50,7 @@ use Async::Event::Interval;
     my $ok = eval { $e->timeout(0.5); 1 };
     my $err = $@;
     is $ok, undef, "timeout(0.5) croaks";
-    like $err, qr/must be a positive integer/,
+    like $err, qr/must be a non-negative integer/,
         "...with validation message";
 }
 
@@ -60,7 +60,7 @@ use Async::Event::Interval;
     my $ok = eval { $e->timeout(""); 1 };
     my $err = $@;
     is $ok, undef, "timeout('') croaks";
-    like $err, qr/must be a positive integer/,
+    like $err, qr/must be a non-negative integer/,
         "...with validation message";
 }
 

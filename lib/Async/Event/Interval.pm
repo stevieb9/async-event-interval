@@ -107,7 +107,7 @@ sub immediate {
 
     if (@_ > 1) {
         if (defined $value && $value !~ /^\d+$/) {
-            croak "\$value must be a positive integer or undef";
+            croak "\$value must be a non-negative integer or undef";
         }
         _events_write(sub { $events{$self->id}{immediate} = $value });
     }
@@ -176,7 +176,10 @@ sub start {
         return;
     }
     $self->_crashed(0);
-    _events_write(sub { delete $events{$self->id}{_stop_requested} });
+    _events_write(sub {
+        delete $events{$self->id}{_stop_requested};
+        delete $events{$self->id}{_clean_exit};
+    });
     $self->_started(1);
     $self->_event(@callback_params);
 }
@@ -226,7 +229,7 @@ sub timeout {
 
     if (@_ > 1) {
         if (defined $timeout && $timeout !~ /^\d+$/) {
-            croak "\$timeout must be a positive integer or undef";
+            croak "\$timeout must be a non-negative integer or undef";
         }
         _events_write(sub { $events{$self->id}{timeout} = $timeout });
     }
@@ -302,8 +305,14 @@ sub _detect_crash {
 
     if (! kill 0, $self->pid) {
         $self->_started(0);
-        $self->_crashed(1);
         $self->_pid(0);
+
+        if (_events_read(sub { $events{$self->id}{_clean_exit} })) {
+            _events_write(sub { delete $events{$self->id}{_clean_exit} });
+        }
+        else {
+            $self->_crashed(1);
+        }
     }
 }
 sub _errors {
@@ -367,11 +376,15 @@ sub _event {
                     $self->_run_callback(@callback_params);
                 }
             };
-            $self->_pm->finish($@ ? 1 : 0);
+            my $exit_code = $@ ? 1 : 0;
+            _events_write(sub { $events{$self->id}{_clean_exit} = 1 }) if !$exit_code;
+            $self->_pm->finish($exit_code);
         }
         else {
             eval { $self->_run_callback(@callback_params) };
-            $self->_pm->finish($@ ? 1 : 0);
+            my $exit_code = $@ ? 1 : 0;
+            _events_write(sub { $events{$self->id}{_clean_exit} = 1 }) if !$exit_code;
+            $self->_pm->finish($exit_code);
         }
     }
 }
@@ -623,7 +636,7 @@ A simple event that updates JSON data from a website using a shared scalar
 variable, while allowing the main application to continue running in the
 foreground. Multiple events can be simultaneously used if desired.
 
-See L</EXAMPLES> for other various functionality of this module.
+See the L</SCENARIOS/EXAMPLES> section for further usage examples.
 
     use warnings;
     use strict;
@@ -645,7 +658,8 @@ See L</EXAMPLES> for other various functionality of this module.
     }
 
     sub callback {
-        $$json = ...; # Fetch JSON from website
+        my $content = get_webpage_content();
+        $$json = decode_json($content);
     }
 
 =head1 DESCRIPTION
@@ -657,7 +671,7 @@ If a time of zero is specified, we'll run the event only once.
 
 =head2 new($delay, $callback, @params)
 
-Returns a new C<Async::Event::Interval> object. Does not create the event. Use
+Returns a new C<Async::Event::Interval> object. Does not start the event. Use
 C<start> for that.
 
 Parameters:
@@ -711,7 +725,12 @@ send them in as.
 
 =head2 stop
 
-Stops the event from being executed.
+Stops the event from being executed. Sets a cooperative C<_stop_requested>
+flag in shared memory so a well-behaved child exits its event loop on the
+next iteration. If the child is stuck in a long-running callback, escalates:
+sends C<SIGTERM> and polls for up to C<STOP_TERM_TIMEOUT> seconds, then
+sends C<SIGKILL> and polls for up to C<STOP_KILL_TIMEOUT> seconds. Croaks
+if the process survives both signals.
 
 =head2 restart
 
@@ -745,6 +764,8 @@ B<Side effect>: calling C<error()> runs the same crash probe documented
 under L</status>. The event's internal flags and PID may be mutated as a
 side effect of this call.
 
+See L</errors> for the crash count.
+
 =head2 interval($seconds)
 
 Gets/sets the delay time (in seconds) between each execution of the event's
@@ -755,11 +776,11 @@ Parameters:
 
     $seconds
 
-Optional, Integer: The number of seconds (can be floating point) to delay
+Optional, Number: The number of seconds (integer or floating point) to delay
 between executions.
 
 Return: Number (integer or float), the number of seconds between execution
-runs. If we're in a run-once scenario, the return will be zero C<0>.
+runs. If the interval was set to zero, the return will be C<0>.
 
 =head2 timeout($seconds)
 
@@ -791,10 +812,12 @@ cadence.
 Set a value of C<1> to enable immediate first execution. Set to C<0> or
 C<undef> to disable (the default).
 
-The flag is read from shared memory at the start of the event loop, so changes
-made via this setter before calling C<start> take effect. Setting it after the
-event is started has no effect on the current run; the event must be restarted
-for a change to apply.
+The flag is read from shared memory on each iteration of the event loop.
+Changes made before calling C<start> always take effect. Changes made after
+C<start> take effect on the next loop iteration; however, once the first
+callback has executed, C<immediate> has already served its purpose and
+further changes will not trigger another immediate execution.
+Restart the event for a fresh C<immediate> check.
 
 Parameters:
 
@@ -820,12 +843,26 @@ destroyed; the segment will no longer exist. If you need a shared scalar
 whose lifetime is independent of any event, tie it directly with
 L<IPC::Shareable>.
 
+B<Hex keys>: L</info> and L</events> return C<shared_scalars> as an
+arrayref of hex key strings. These identify the underlying IPC segments
+and can be used to re-attach from another process:
+
+    my $info = $event->info;
+    for my $key (@{ $info->{shared_scalars} }) {
+        tie my $scalar, 'IPC::Shareable', $key, {};
+        print "$$scalar\n";
+    }
+
+In practice, however, it is simpler to retain the reference returned by
+C<shared_scalar()> and use it directly.
+
 =head1 METHODS - EVENT INFORMATION
 
 =head2 errors
 
 Returns the number of times a started or restarted event has crashed
-unexpectedly.
+unexpectedly. See L</error> to test whether the event is currently in an
+error state.
 
 =head2 error_message
 
@@ -851,7 +888,7 @@ The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
             'shared_scalars' => [
                 '0x4a3f2c1b5d6e',
                 '0x7f8e9d0c1b2a'
-             ],
+            ],
             'pid'       => 11859,
             'runs'      => 16,
             'errors'    => 0,
@@ -883,7 +920,7 @@ The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
         'shared_scalars' => [
             '0x4a3f2c1b5d6e',
             '0x7f8e9d0c1b2a'
-         ],
+        ],
         'pid'      => 6841,
         'runs'     => 4077,
         'errors'   => 0,
@@ -892,22 +929,22 @@ The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
 
 =head2 pid
 
-Returns the Process ID the event is running under.
-
-Returns C<undef> in two cases:
+Returns the Process ID the event is running under:
 
 =over 4
 
-=item * before C<start()> has ever been called
+=item * C<undef> before C<start()> has ever been called
 
-=item * after a crashed event has been detected (via a call to L</error>,
-L</status>, or L</waiting>) and until the next C<start()> / C<restart()>
+=item * C<undef> after a crashed event has been detected (via a call to
+L</error>, L</status>, or L</waiting>) and until the next
+C<start()> / C<restart()>
+
+=item * The PID of the most recent child after a clean C<stop()> (a dead
+process; provided for diagnostic purposes only)
+
+=item * A positive integer (the PID of the currently running child) otherwise
 
 =back
-
-After a clean C<stop()>, returns the PID of the most recent child (now a
-dead process; provided for diagnostic purposes only). Otherwise returns
-a positive integer; the PID of the currently running child.
 
 Use L</status> and L</error> to determine which state applies; do not
 interpret the integer value beyond "some past or current child PID".
@@ -931,8 +968,10 @@ C<start()> repeatedly for numerous individual/one-off runs.
 
     $event->start;
 
-    # Do stuff, then run the event again if it's done its previous task
+    # Do other work while the event runs...
 
+    # waiting() probes the child process; returns true once the
+    # one-shot has finished, allowing a clean restart
     $event->start if $event->waiting;
 
 =head2 Change delay interval during operation
@@ -1055,6 +1094,7 @@ For shared variables, see L</shared_scalar>.
 
     use Async::Event::Interval;
 
+    # kill 9, $$ is a contrived self-kill to demonstrate crash detection
     my $event = Async::Event::Interval->new(0.5, sub { kill 9, $$; });
 
     $event->start;
@@ -1073,6 +1113,7 @@ For shared variables, see L</shared_scalar>.
 
     use Async::Event::Interval;
 
+    # kill 9, $$ is a contrived self-kill to demonstrate crash detection
     my $event = Async::Event::Interval->new(0.5, sub { kill 9, $$; });
 
     $event->start;
