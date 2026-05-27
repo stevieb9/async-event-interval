@@ -17,6 +17,8 @@ jobs:
             os: ubuntu-latest
             coverage: true
     name: Perl ${{ matrix.perl }} on ${{ matrix.os }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v2
       - name: Set up perl
@@ -30,15 +32,12 @@ jobs:
           perl -e 'exit($] < 5.014 ? 0 : 1)' && cpanm -n https://backpan.perl.org/authors/id/Y/YA/YANICK/Parallel-ForkManager-2.02.tar.gz || true
       - run: cpanm --installdeps .
       - name: Run tests (no coverage)
-        env:
-          CI_TESTING: 1
         if: ${{ !matrix.coverage }}
         run: prove -lv t
       - name: Run tests (with coverage)
         if: ${{ matrix.coverage }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         run: |
           cpanm -n Devel::Cover::Report::Coveralls
           cover -test -report Coveralls
