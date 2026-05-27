@@ -95,6 +95,8 @@ Revision history for Async-Event-Interval
     - _detect_crash no longer marks cleanly-exited one-shot events as
       crashed; child writes _clean_exit flag to shared %events before
       finish(0) so the parent can distinguish normal completion from a crash
+    - Fix flaky t/90 on macOS CI by replacing nested-hash shared memory
+      writes with flat keys, eliminating child-segment race between forks
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()

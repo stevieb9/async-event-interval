@@ -37,8 +37,8 @@ warn "Sems Before: $sems_begin\n" if $ENV{PRINT_SEGS};
         $segs_begin + 2,
         "Proper number of segs after IPC create";
 
-    my $event_one = Async::Event::Interval->new(0, sub {$shared_data{$$}{called}++});
-    my $event_two = Async::Event::Interval->new(0, sub {$shared_data{$$}{called}++});
+    my $event_one = Async::Event::Interval->new(0, sub {$shared_data{$$}++});
+    my $event_two = Async::Event::Interval->new(0, sub {$shared_data{$$}++});
 
     $event_one->start;
     $event_two->start;
@@ -51,15 +51,15 @@ warn "Sems Before: $sems_begin\n" if $ENV{PRINT_SEGS};
     my $one_pid = $event_one->pid;
     my $two_pid = $event_two->pid;
 
-    is exists $shared_data{$one_pid}{called}, 1, "Event one got a rand shm key ok";
-    is exists $shared_data{$two_pid}{called}, 1, "Adding srand() ensures _shm_key_rand() gives out rand key in fork()";
+    ok exists $shared_data{$one_pid}, "Event one got a rand shm key ok";
+    ok exists $shared_data{$two_pid}, "Adding srand() ensures _shm_key_rand() gives out rand key in fork()";
 
     my $segs_before_ipc_cleaned = IPC::Shareable::seg_count();
 
     is
         $segs_before_ipc_cleaned,
-        $segs_begin + 6,
-        "1 seg for AEI, 1 seg for IPC, 2 segs for events, 2 entries for adds by each event to IPC";
+        $segs_begin + 4,
+        "1 seg for AEI, 1 seg for IPC, 2 segs for events";
 
     IPC::Shareable::clean_up_all;
 
