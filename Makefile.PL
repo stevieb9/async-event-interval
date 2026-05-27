@@ -42,5 +42,5 @@ WriteMakefile(
 );
 
 sub MY::postamble {
-    return $^O eq 'darwin' ? "TARFLAGS = --no-xattrs --no-mac-metadata cvf\n" : '';
+    return '';
 }
