@@ -26,7 +26,8 @@ jobs:
       - run: perl -V
       - run: cpanm ExtUtils::PL2Bat
       - run: cpanm ExtUtils::MakeMaker
-      - run: perl -e 'exit($] < 5.014 ? 0 : 1)' && cpanm -n https://backpan.perl.org/authors/id/Y/YA/YANICK/Parallel-ForkManager-2.02.tar.gz || true
+      - run: |
+          perl -e 'exit($] < 5.014 ? 0 : 1)' && cpanm -n https://backpan.perl.org/authors/id/Y/YA/YANICK/Parallel-ForkManager-2.02.tar.gz || true
       - run: cpanm --installdeps .
       - name: Run tests (no coverage)
         env:
