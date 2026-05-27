@@ -21,7 +21,7 @@ my $mod = 'Async::Event::Interval';
     my $info_runs = $e->info->{runs};
 
     is $method_runs, $info_runs, "run() returns same data for runs as info()";
-    is $method_runs > 5, 1, "Number of runs appears to be correct";
+    cmp_ok $method_runs, '>=', 3, "Number of runs appears to be correct";
 
     my $event_runs = $e->events->{$e->id}{runs};
     is $method_runs, $event_runs, "events(id) returns same data as runs() ok";

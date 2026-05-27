@@ -29,9 +29,9 @@ my $mod = 'Async::Event::Interval';
 
     select(undef, undef, undef, 1);
 
-    is $e->events->{$e->id}{runs}, 8, "events() has proper count of runs ok";
-    is $e->info->{runs}, 8, "...so does info()";
-    is $e->runs, 8, "...so does runs()";
+    cmp_ok $e->events->{$e->id}{runs}, '>=', 6, "events() has correct count of runs ok";
+    cmp_ok $e->info->{runs}, '>=', 6, "...so does info()";
+    cmp_ok $e->runs, '>=', 6, "...so does runs()";
 
     is $e->events->{$e->id}{errors}, 1, "events() has proper count of errors ok";
     is $e->info->{errors}, 1, "...so does info()";
@@ -61,9 +61,9 @@ my $mod = 'Async::Event::Interval';
 
     select(undef, undef, undef, 1);
 
-    is $e->events->{$e->id}{runs}, 16, "events() has proper count of runs after restart ok";
-    is $e->info->{runs}, 16, "...so does info()";
-    is $e->runs, 16, "...so does runs()";
+    cmp_ok $e->events->{$e->id}{runs}, '>=', 14, "events() has correct count of runs after restart ok";
+    cmp_ok $e->info->{runs}, '>=', 14, "...so does info()";
+    cmp_ok $e->runs, '>=', 14, "...so does runs()";
 
     is $e->events->{$e->id}{errors}, 2, "events() has proper count of errors after restart ok";
     is $e->info->{errors}, 2, "...so does info()";

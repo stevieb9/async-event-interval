@@ -580,10 +580,19 @@ sub DESTROY {
         }
     }
 
-    _events_write(sub {
-        delete $events{$self->id};
-        $events{_event_count}--;
-    });
+    my $ok = eval {
+        _events_write(sub {
+            delete $events{$self->id};
+            $events{_event_count}--;
+        });
+        1;
+    };
+
+    if (!$ok) {
+        if (my $knot = tied(%events)) {
+            $knot->{_lock} = 0;
+        }
+    }
 }
 END {
     _end();
