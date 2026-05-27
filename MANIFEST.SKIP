@@ -48,6 +48,6 @@ agent.txt
 profiling/
 ^plans/
 ^examples/
-.claude/
+^\.claude/
 ^[^/]+\.md$
 
