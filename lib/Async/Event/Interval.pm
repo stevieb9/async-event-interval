@@ -544,6 +544,10 @@ sub _end {
         alarm(END_LOCK_TIMEOUT);
         if (! _events_read(sub { $events{_event_count} || 0 })
             && $creator_pid == $$) {
+            _events_write(sub {
+                delete $events{_id_counter};
+                delete $events{_event_count};
+            });
             IPC::Shareable::clean_up_protected(_shm_lock());
         }
         alarm(0);

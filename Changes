@@ -86,6 +86,7 @@ Revision history for Async-Event-Interval
     - Guard DESTROY's _events_write in eval and clear stale _lock on
       failure to prevent EAGAIN from IPC::Shareable's unlock() leaking
       IPC segments on Linux
+    - Ensure counters are properly cleaned up in _end() cleanup
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()
