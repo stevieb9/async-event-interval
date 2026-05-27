@@ -39,3 +39,7 @@ WriteMakefile(
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean => { FILES => 'Async-Event-Interval-*' },
 );
+
+sub MY::postamble {
+    return $^O eq 'darwin' ? "TARFLAGS = --no-xattrs --no-mac-metadata cvf\n" : '';
+}
