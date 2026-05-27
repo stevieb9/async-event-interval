@@ -81,6 +81,8 @@ Revision history for Async-Event-Interval
       test-suite segments and purge orphans from prior crashed runs; bump
       IPC::Shareable prereq to 1.15
     - Fixes and enhancements to the local VM test infrastructure
+    - Pin Parallel::ForkManager to < 2.00 on Perl < 5.14 to avoid Moo XS
+      compile failures on macOS
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()
