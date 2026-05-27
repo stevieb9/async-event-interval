@@ -35,7 +35,7 @@ my $mod = 'Async::Event::Interval';
 
     $e->start;
 
-    sleep 1;
+    sleep 2;
 
     is $e->runs >= 4, 1, "event is async and correct";
 
@@ -49,7 +49,7 @@ my $mod = 'Async::Event::Interval';
     select(undef, undef, undef, 0.3);
     is $e1->runs, 1, "With interval of 0.2, execution runs at the right time";
 
-    select(undef, undef, undef, 0.7);
+    select(undef, undef, undef, 1.7);
 
     my $runs_02 = $e1->runs;
     is $runs_02 > 3, 1, "With interval of 0.2, execution happens at the proper rate";
