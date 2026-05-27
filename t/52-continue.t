@@ -114,14 +114,14 @@ sub _dead_pid {
     my $e = Async::Event::Interval->new(0.05, sub {});
     $e->start;
 
-    select(undef, undef, undef, 0.10);
+    select(undef, undef, undef, 0.20);
     $e->stop;
 
     my $runs_before = $e->runs;
     cmp_ok $runs_before, '>', 0, "ran before first stop";
 
     $e->start;
-    select(undef, undef, undef, 0.10);
+    select(undef, undef, undef, 0.20);
     $e->stop;
 
     my $runs_after = $e->runs;
