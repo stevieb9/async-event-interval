@@ -466,6 +466,8 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         "error count incremented after in-process crash test";
     like $e->error_message, qr/child-crash/,
         "error_message preserved";
+
+    $e->_pid(0);
 }
 
 # Additional 1.2 coverage: _pm->finish must always be called with the
