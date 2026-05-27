@@ -27,7 +27,11 @@ my $mod = 'Async::Event::Interval';
 
     $e->start;
 
-    select(undef, undef, undef, 1);
+    my $waited = 0;
+    until ($e->error || $waited >= 10) {
+        select(undef, undef, undef, 0.1);
+        $waited += 0.1;
+    }
 
     cmp_ok $e->events->{$e->id}{runs}, '>=', 6, "events() has correct count of runs ok";
     cmp_ok $e->info->{runs}, '>=', 6, "...so does info()";
@@ -59,7 +63,11 @@ my $mod = 'Async::Event::Interval';
     $num = 1;
     $e->restart if $e->waiting;
 
-    select(undef, undef, undef, 1);
+    $waited = 0;
+    until ($e->error || $waited >= 10) {
+        select(undef, undef, undef, 0.1);
+        $waited += 0.1;
+    }
 
     cmp_ok $e->events->{$e->id}{runs}, '>=', 14, "events() has correct count of runs after restart ok";
     cmp_ok $e->info->{runs}, '>=', 14, "...so does info()";
