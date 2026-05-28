@@ -84,10 +84,12 @@ sub poll_until {
 {
     my $e = $mod->new(2, sub { die "boom\n" });
     $e->start;
-    poll_until(sub { $e->info->{error} == 1 });
+    # Poll on error() (not info->{error}) so the _detect_crash side effect
+    # clears _started; otherwise restart() warns "Event already running..."
+    # on slow VMs where the child sets the shared flag before it exits.
+    poll_until(sub { $e->error });
     is $e->info->{error}, 1, "after crash: error=1";
 
-    $e->error;        # clears _started so restart() proceeds
     $e->restart;
     select(undef, undef, undef, 0.2);
     is $e->info->{error}, 0, "right after restart: error=0 (cleared)";
@@ -132,13 +134,14 @@ sub poll_until {
 {
     my $e = $mod->new(0, sub { die "boom\n" });
     $e->start;
-    poll_until(sub { $e->errors == 1 });
+    # Poll on error() so _detect_crash runs (clears _started, increments
+    # crash bookkeeping) before we look at the shared errors counter.
+    poll_until(sub { $e->error });
     is $e->errors, 1, "first crash: errors=1";
     is $e->info->{error}, 1, "first crash: error=1";
 
-    $e->error;   # clears _started so restart() works
     $e->restart;
-    poll_until(sub { $e->errors == 2 });
+    poll_until(sub { $e->error });
     is $e->errors, 2, "second crash: errors=2 (cumulative)";
     is $e->info->{error}, 1, "second crash: error=1 (current)";
 }
@@ -160,7 +163,10 @@ sub poll_until {
 {
     my $e = $mod->new(0, sub { die "boom\n" });
     $e->start;
-    poll_until(sub { $e->info->{error} == 1 });
+    # Poll on error() so _detect_crash has set _crashed before the
+    # equality check; otherwise the shared flag may be 1 while the
+    # method-form returns 0 (child not yet observed dead).
+    poll_until(sub { $e->error });
     my $method = $e->error ? 1 : 0;
     is $e->info->{error}, $method,
         "snapshot error matches error() method ($method)";
