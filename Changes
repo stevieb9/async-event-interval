@@ -100,6 +100,11 @@ Revision history for Async-Event-Interval
       that run _end() cleanup before re-raising; _end() now unconditionally
       stops children and removes protected segments instead of skipping
       when _event_count > 0
+    - Fix _end() SIGALRM deadlock: clear SA_RESTART via POSIX::sigaction so
+      the alarm actually interrupts blocked semop(); split the single 2s alarm
+      into per-phase evals so each cleanup step runs even when an earlier one
+      times out; add @all_pids fallback so children are killed even when the
+      %events read-lock is stuck
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()

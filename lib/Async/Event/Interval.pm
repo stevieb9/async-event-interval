@@ -49,6 +49,9 @@ _create_events_segment();
 my $creator_pid = $$;
 my $_shutting_down = 0;
 
+# Fallback PID list for _end() when %events lock is stuck
+my @all_pids;
+
 *restart = \&start;
 
 sub new {
@@ -367,6 +370,7 @@ sub _event {
         if ($pid){
             # This is the parent process
             $self->_pid($pid);
+            push @all_pids, $pid;
             last;
         }
 
@@ -578,6 +582,19 @@ sub _events_stop_requested {
 
 # Destruction
 
+sub _alarmed_eval {
+    my ($timeout, $code) = @_;
+    my $handler = sub { die "alarm\n" };
+    local $SIG{ALRM} = $handler;
+    my $sigset = POSIX::SigSet->new(POSIX::SIGALRM());
+    my $sa     = POSIX::SigAction->new($handler, $sigset, 0);
+    my $old    = POSIX::SigAction->new();
+    POSIX::sigaction(POSIX::SIGALRM(), $sa, $old);
+    alarm($timeout);
+    eval { $code->() };
+    alarm(0);
+    POSIX::sigaction(POSIX::SIGALRM(), $old);
+}
 sub _end {
     my ($is_shutdown) = @_;
     return if $$ != $creator_pid;
@@ -587,44 +604,45 @@ sub _end {
         $_shutting_down = 1;
     }
 
-    eval {
-        local $SIG{ALRM} = sub { die "alarm\n" };
-        alarm(END_LOCK_TIMEOUT);
-
-        my @pids;
-        eval {
-            _events_read(sub {
-                for my $id (keys %events) {
-                    next if $id =~ /^_/;
-                    my $pid = $events{$id}{pid};
-                    push @pids, $pid if $pid && kill(0, $pid);
-                }
-            });
-        };
-        die $@ if $@ && $@ eq "alarm\n";
-
-        for my $pid (@pids) {
-            kill 'TERM', $pid;
-        }
-        for my $pid (@pids) {
-            for (1..10) {
-                last unless kill(0, $pid);
-                select(undef, undef, undef, 0.05);
+    # Phase 1: Collect PIDs from %events (1s timeout).
+    # Falls back to @all_pids if the lock is stuck.
+    my @pids;
+    _alarmed_eval(1, sub {
+        _events_read(sub {
+            for my $id (keys %events) {
+                next if $id =~ /^_/;
+                my $pid = $events{$id}{pid};
+                push @pids, $pid if $pid && kill(0, $pid);
             }
-            kill 'KILL', $pid if kill(0, $pid);
+        });
+    });
+    if (!@pids) {
+        @pids = grep { kill(0, $_) } @all_pids;
+    }
+
+    # Phase 2: Kill children (bounded by poll loops, no alarm needed).
+    for my $pid (@pids) {
+        kill 'TERM', $pid;
+    }
+    for my $pid (@pids) {
+        for (1..10) {
+            last unless kill(0, $pid);
+            select(undef, undef, undef, 0.05);
         }
+        kill 'KILL', $pid if kill(0, $pid);
+    }
 
-        eval {
-            _events_write(sub {
-                delete @events{keys %events};
-            });
-        };
-        die $@ if $@ && $@ eq "alarm\n";
+    # Phase 3: Clear %events (1s timeout).
+    _alarmed_eval(1, sub {
+        _events_write(sub {
+            delete @events{keys %events};
+        });
+    });
 
+    # Phase 4: Release IPC segments (1s timeout).
+    _alarmed_eval(1, sub {
         IPC::Shareable::clean_up_protected(_shm_lock());
-
-        alarm(0);
-    };
+    });
 }
 sub DESTROY {
     my $self = $_[0];
