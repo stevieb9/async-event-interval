@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 
+use File::Temp;
 use IPC::Shareable;
 use Test::More;
 
@@ -14,6 +15,8 @@ my $sems_before = IPC::Shareable::sem_count();
 # when _event_count > 0 and DESTROY never ran (global destruction
 # skipped on signal death).
 
+my $flag_file = File::Temp::tmpnam();
+
 my $pid = fork;
 die "fork: $!" unless defined $pid;
 
@@ -21,7 +24,11 @@ if (! $pid) {
     IPC::Shareable->testing_set('Async::Event::Interval');
     require Async::Event::Interval;
 
-    my $event = Async::Event::Interval->new(5, sub { sleep 4 });
+    my $event = Async::Event::Interval->new(5, sub {
+        open my $fh, '>', $flag_file;
+        close $fh;
+        sleep 4;
+    });
     $event->immediate(1);
     $event->timeout(3);
     $event->start;
@@ -30,11 +37,18 @@ if (! $pid) {
     exit;
 }
 
-sleep 1;
+for (1..50) {
+    last if -e $flag_file;
+    select(undef, undef, undef, 0.1);
+}
+
+ok -e $flag_file, "Event callback was invoked before SIGINT";
 
 kill 'INT', $pid;
 waitpid $pid, 0;
 select(undef, undef, undef, 0.3);
+
+unlink $flag_file if -e $flag_file;
 
 my $segs_after = IPC::Shareable::seg_count();
 my $sems_after = IPC::Shareable::sem_count();

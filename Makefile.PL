@@ -30,6 +30,7 @@ WriteMakefile(
     BUILD_REQUIRES => {
         'Mock::Sub'        => 0,
         'Test::More'       => 0,
+        'File::Temp'       => 0,
         'Test::SharedFork' => 0,
     },
     PREREQ_PM => {
