@@ -106,6 +106,8 @@ Revision history for Async-Event-Interval
       times out; add @all_pids fallback so children are killed even when the
       %events read-lock is stuck
     - Add 'error' and 'waiting' fields to events() and info() snapshots
+    - Add wait() method that polls until the event is dormant (optional
+      poll interval, default 0.01s)
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()

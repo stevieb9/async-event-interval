@@ -277,6 +277,24 @@ sub timeout {
 
     return _events_read(sub { $events{$self->id}->{timeout} });
 }
+sub wait {
+    my ($self, $interval) = @_;
+
+    if (defined $interval) {
+        if ($interval !~ /^\d+$/ && $interval !~ /^(\d+)?\.\d+$/) {
+            croak "\$interval must be an integer or float";
+        }
+    }
+    else {
+        $interval = 0.01;
+    }
+
+    while (! $self->waiting) {
+        select(undef, undef, undef, $interval);
+    }
+
+    return;
+}
 sub waiting {
     my ($self) = @_;
     return 1 if $self->error || ! $self->status;
@@ -898,6 +916,25 @@ flag is set, and C<pid> is cleared (so L</pid> subsequently returns
 C<undef>). Subsequent calls to C<status()>, L</error>, or L</waiting>
 see the updated state. To clear the crash flag, call L<start()|/start(@params)>
 or L</restart>.
+
+=head2 wait($interval)
+
+Blocks until L<waiting()|/waiting> returns true, polling at the given
+interval. Useful for one-shot events where you want to wait for the callback
+to finish without writing the poll loop by hand.
+
+Parameters:
+
+    $interval
+
+Optional, Number: Polling interval in seconds (integer or float). Defaults to
+C<0.01>.
+
+Return: Nothing.
+
+B<Note>: C<wait()> returns once the event is dormant for any reason, including
+crash. Inspect L</error> after the call returns if you need to distinguish a
+clean finish from a crash.
 
 =head2 waiting
 
