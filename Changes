@@ -1,7 +1,6 @@
 Revision history for Async-Event-Interval
 
 1.14 UNREL
-    -
     - Add $count++ in callback exec params example in POD
     - s/contains any/doesn't contain/ in Changes entry 1.12
     - Remove all reliance on CI_TESTING env var in unit tests. They all run on
