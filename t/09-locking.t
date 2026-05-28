@@ -787,25 +787,24 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         "original shared_scalar ref tracks live changes";
 }
 
-# _end() calls clean_up_protected only when %events is empty.
+# _end() unconditionally cleans up protected segments so that signal
+# death (where DESTROY may never run) does not leak.
 
 {
     my $cleanup_calls = 0;
     no warnings 'redefine';
     local *IPC::Shareable::clean_up_protected = sub { $cleanup_calls++ };
 
-    # With an event present, _end() must not clean up.
     my $e = Async::Event::Interval->new(0.5, sub {});
     Async::Event::Interval::_end();
-    is $cleanup_calls, 0,
-        "_end() does not call clean_up_protected when events exist";
+    is $cleanup_calls, 1,
+        "_end() calls clean_up_protected even with live events";
 
-    # Destroy the event, removing it from %events.
     $e = undef;
     $cleanup_calls = 0;
     Async::Event::Interval::_end();
     is $cleanup_calls, 1,
-        "_end() calls clean_up_protected when %events is empty";
+        "_end() calls clean_up_protected after events destroyed";
 }
 
 # 2.1: _end() must not block forever if another process holds LOCK_EX

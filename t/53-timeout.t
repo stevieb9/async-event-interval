@@ -101,7 +101,7 @@ use Async::Event::Interval;
     $e->start;
     select(undef, undef, undef, 2);
     is $e->errors, 1, "run-once over timeout: errors incremented";
-    like $e->error_message, qr/timed out after 1s/,
+    like $e->error_message, qr/Callback timed out after 1 second/,
         "run-once over timeout: error_message records timeout";
 }
 
@@ -129,7 +129,7 @@ use Async::Event::Interval;
     $e->start;
     select(undef, undef, undef, 2);
     is $e->errors, 1, "interval over timeout: errors incremented";
-    like $e->error_message, qr/timed out after 1s/,
+    like $e->error_message, qr/Callback timed out after 1 second/,
         "interval over timeout: error_message records timeout";
     is $e->status, 0,
         "interval over timeout: status() is 0 (child no longer running)";
@@ -162,7 +162,7 @@ use Async::Event::Interval;
     select(undef, undef, undef, 3.5);        # next iteration starts & fires
     is $e->errors, 1,
         "dynamic timeout: error recorded after timeout was shortened";
-    like $e->error_message, qr/timed out after 1s/,
+    like $e->error_message, qr/timed out after 1 second/,
         "dynamic timeout: error_message reflects the new timeout";
 }
 
@@ -196,6 +196,6 @@ use Async::Event::Interval;
     $e->restart;
     select(undef, undef, undef, 2);
     is $e->errors, 2, "second run also timed out (timeout persisted)";
-    like $e->error_message, qr/timed out after 1s/,
+    like $e->error_message, qr/timed out after 1 second/,
         "error_message still matches timeout pattern after restart";
 }

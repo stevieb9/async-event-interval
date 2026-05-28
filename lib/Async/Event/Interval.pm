@@ -31,6 +31,14 @@ use constant {
 
 $SIG{CHLD} = 'IGNORE';
 
+for my $sig (qw(INT TERM)) {
+    $SIG{$sig} = sub {
+        _end(1);
+        $SIG{$sig} = 'DEFAULT';
+        kill $sig, $$;
+    };
+}
+
 # Every access to the %events has MUST go through _events_read() and
 # _events_write(). See the example in new() for how they are used.
 
@@ -39,6 +47,7 @@ my %events;
 my $shared_memory_protect_lock = _rand_shm_lock();
 _create_events_segment();
 my $creator_pid = $$;
+my $_shutting_down = 0;
 
 *restart = \&start;
 
@@ -356,16 +365,16 @@ sub _event {
             croak "fork() failed: $!";
         }
         if ($pid){
-            # this is the parent process
+            # This is the parent process
             $self->_pid($pid);
             last;
         }
 
-        # set the child's proc id
+        # Set the child's proc id
 
         $self->{pid} = $$;
 
-        # if no interval, run only once
+        # If no interval, run only once
 
         if ($self->interval) {
             eval {
@@ -385,14 +394,24 @@ sub _event {
                     $self->_run_callback(@callback_params);
                 }
             };
+
             my $exit_code = $@ ? 1 : 0;
-            _events_write(sub { $events{$self->id}{_clean_exit} = 1 }) if !$exit_code;
+
+            if (! $exit_code) {
+                _events_write(sub {$events{$self->id}{_clean_exit} = 1});
+            }
+
             $self->_pm->finish($exit_code);
         }
         else {
             eval { $self->_run_callback(@callback_params) };
+
             my $exit_code = $@ ? 1 : 0;
-            _events_write(sub { $events{$self->id}{_clean_exit} = 1 }) if !$exit_code;
+
+            if (! $exit_code) {
+                _events_write(sub {$events{$self->id}{_clean_exit} = 1});
+            }
+
             $self->_pm->finish($exit_code);
         }
     }
@@ -458,7 +477,10 @@ sub _run_callback {
 
     my $ok = eval {
         if ($timeout) {
-            my $handler = sub { die "timed out after ${timeout}s\n" };
+            my $handler = sub {
+                die "Callback timed out after ${timeout} seconds\n"
+            };
+
             local $SIG{ALRM} = $handler;
 
             # Re-install SIGALRM via POSIX::sigaction with flags=0 to
@@ -557,32 +579,58 @@ sub _events_stop_requested {
 # Destruction
 
 sub _end {
-    # Guard against deadlocking forever on _events_read' LOCK_SH if a
-    # crashed/stuck peer still holds LOCK_EX on the events knot. Bail
-    # out after END_LOCK_TIMEOUT seconds and let the process exit.
+    my ($is_shutdown) = @_;
+    return if $$ != $creator_pid;
+
+    if ($is_shutdown) {
+        return if $_shutting_down;
+        $_shutting_down = 1;
+    }
 
     eval {
         local $SIG{ALRM} = sub { die "alarm\n" };
         alarm(END_LOCK_TIMEOUT);
-        if (! _events_read(sub { $events{_event_count} || 0 })
-            && $creator_pid == $$) {
-            _events_write(sub {
-                delete $events{_id_counter};
-                delete $events{_event_count};
+
+        my @pids;
+        eval {
+            _events_read(sub {
+                for my $id (keys %events) {
+                    next if $id =~ /^_/;
+                    my $pid = $events{$id}{pid};
+                    push @pids, $pid if $pid && kill(0, $pid);
+                }
             });
-            IPC::Shareable::clean_up_protected(_shm_lock());
+        };
+        die $@ if $@ && $@ eq "alarm\n";
+
+        for my $pid (@pids) {
+            kill 'TERM', $pid;
         }
+        for my $pid (@pids) {
+            for (1..10) {
+                last unless kill(0, $pid);
+                select(undef, undef, undef, 0.05);
+            }
+            kill 'KILL', $pid if kill(0, $pid);
+        }
+
+        eval {
+            _events_write(sub {
+                delete @events{keys %events};
+            });
+        };
+        die $@ if $@ && $@ eq "alarm\n";
+
+        IPC::Shareable::clean_up_protected(_shm_lock());
+
         alarm(0);
     };
 }
 sub DESTROY {
     my $self = $_[0];
 
-    # The child process inherits copies of ALL event objects, not just
-    # its own. Skip everything — the parent owns cleanup of %events
-    # and the child must never signal or touch shared state. A forked
-    # child has a different PID than the process that loaded the module.
     return if $$ != $creator_pid;
+    return if $_shutting_down;
 
     if (defined $self) {
         $self->stop if $self->pid;
@@ -621,7 +669,7 @@ sub DESTROY {
     }
 }
 END {
-    _end();
+    _end(1);
 }
 
 sub _vim{}
@@ -641,9 +689,10 @@ Async::Event::Interval - Scheduled and one-off asynchronous events
 
 =head1 SYNOPSIS
 
-A simple event that updates JSON data from a website using a shared scalar
-variable, while allowing the main application to continue running in the
-foreground. Multiple events can be simultaneously used if desired.
+Here's an example of a simple event that fetches JSON data from a website every
+two seconds using a shared scalar variable, while allowing the main application
+to continue running in the foreground. Multiple events can be used
+simultaneously if desired.
 
 See the L</SCENARIOS/EXAMPLES> section for further usage examples.
 
@@ -674,7 +723,17 @@ See the L</SCENARIOS/EXAMPLES> section for further usage examples.
 =head1 DESCRIPTION
 
 Very basic implementation of asynchronous events triggered by a timed interval.
-If a time of zero is specified, we'll run the event only once.
+If a time of zero is specified, we'll run the event only once while providing
+the ability to re-run it manually at any time in the future.
+
+B<Signal handling>: The module installs C<$SIG{INT}> and C<$SIG{TERM}>
+handlers at load time to ensure shared memory segments are cleaned up
+when the host process is killed by a signal. The handlers stop any
+running event children, remove all shared memory segments, then
+re-raise the signal with the default handler so the process exits with
+the correct status. If you install your own handlers for these signals,
+call C<Async::Event::Interval::_end(1)> from them before exiting to
+avoid leaking segments.
 
 =head1 METHODS - EVENT OPERATION
 
@@ -800,13 +859,6 @@ Sets (or gets) a per-callback-execution timeout in seconds. If the event's
 callback takes longer than the specified time to complete, the event will
 terminate itself with an error.
 
-Set a timeout of C<0> or C<undef> to disable it (the default is no timeout).
-
-The timeout is read from shared memory at the start of every callback
-invocation, so changes made via this setter while an event is running
-take effect on the next iteration of the interval loop (mirroring
-L</interval($seconds)>).
-
 Parameters:
 
     $seconds
@@ -815,21 +867,20 @@ Optional, Integer: The number of whole seconds the callback is allowed
 to execute for before timing out. Must be a non-negative integer;
 fractional seconds are not supported. Use C<0> or C<undef> to disable.
 
+Default: C<0>
+
+Return: Currently set value.
+
+B<Note>: The timeout is read from shared memory at the start of every callback
+invocation, so changes made via this setter while an event is running
+take effect on the next iteration of the interval loop (mirroring
+L</interval($seconds)>).
+
 =head2 immediate($value)
 
 Sets (or gets) whether the callback fires immediately on C<start>, bypassing
 the first interval wait. Subsequent invocations follow the normal interval
 cadence.
-
-Set a value of C<1> to enable immediate first execution. Set to C<0> or
-C<undef> to disable (the default).
-
-The flag is read from shared memory on each iteration of the event loop.
-Changes made before calling C<start> always take effect. Changes made after
-C<start> take effect on the next loop iteration; however, once the first
-callback has executed, C<immediate> has already served its purpose and
-further changes will not trigger another immediate execution.
-Restart the event for a fresh C<immediate> check.
 
 Parameters:
 
@@ -837,6 +888,20 @@ Parameters:
 
 Optional, Integer: C<1> to enable immediate first execution, C<0> or C<undef>
 to disable. Must be a non-negative integer when defined.
+
+Default: C<0>
+
+Return: Currently set value.
+
+B<Note>: The flag is read from shared memory on each iteration of the event
+loop. Changes made before calling C<start()> always take effect. Changes made
+after C<start()> take effect on the next loop iteration; however, once the first
+callback has executed, C<immediate> has already served its purpose and further
+changes will not trigger another immediate execution. Restart the event for a
+fresh C<immediate> check.
+
+B<Note>: This feature is a no-op when running in single run mode. In that mode,
+the event is fired immediately on a call to C<start()>.
 
 =head2 shared_scalar
 
@@ -847,17 +912,16 @@ multiple shared scalars can be created by each event.
 To read from or assign to the returned scalar, you must dereference it. Eg.
 C<$$shared_scalar = 1;>.
 
-B<Lifetime>: The underlying shared memory segment is owned by the event
-object that created it. When the event goes out of scope (and its
-C<DESTROY> runs), every C<shared_scalar> it created is released. Do not
-dereference the returned scalar reference after the owning event has been
-destroyed; the segment will no longer exist. If you need a shared scalar
-whose lifetime is independent of any event, tie it directly with
-L<IPC::Shareable>.
+B<Lifetime>: The underlying shared memory segment is owned by the event object
+that created it. When the event goes out of scope (and its C<DESTROY> runs),
+every C<shared_scalar> it created is released. Do not dereference the returned
+scalar reference after the owning event has been destroyed; the segment will no
+longer exist. If you need a shared scalar whose lifetime is independent of any
+event, tie it directly with L<IPC::Shareable>.
 
-B<Hex keys>: L</info> and L</events> return C<shared_scalars> as an
-arrayref of hex key strings. These identify the underlying IPC segments
-and can be used to re-attach from another process:
+B<Hex keys>: L</info> and L</events> return C<shared_scalars> as an arrayref of
+hex key strings. These identify the underlying IPC segments and can be used to
+re-attach from another process:
 
     my $info = $event->info;
     for my $key (@{ $info->{shared_scalars} }) {
@@ -880,18 +944,18 @@ error state.
 
 Returns the error message (if any) that caused the most recent event crash.
 
-If the crash was caused by L</timeout($seconds)> firing, the message has
-the form C<"timed out after Ns\n"> (where C<N> is the timeout in whole
-seconds), which consumers can pattern-match on to distinguish timeouts
-from other callback failures.
+If the crash was caused by L</timeout($seconds)> firing, the message has the
+form C<"Callback timed out after Ns"> (where C<N> is the timeout in whole
+seconds), which consumers can pattern-match on to distinguish timeouts from
+other callback failures.
 
 =head2 events
 
 Returns a plain hash reference containing a snapshot of the data for all
-existing events. The returned hash is a B<copy>; modifying it will not
-affect the live events. C<shared_scalars> is an arrayref of the hex key
-strings for each shared scalar created by the event; use the scalar
-reference returned by L</shared_scalar> to read or write values.
+existing events. The returned hash is a B<copy>; modifying it will not affect
+the live events. C<shared_scalars> is an arrayref of the hex key strings for
+each shared scalar created by the event; use the scalar reference returned by
+L</shared_scalar> to read or write values.
 
 The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
 
@@ -921,10 +985,10 @@ Returns the integer ID of the event.
 
 =head2 info
 
-Returns a hash reference containing a snapshot of the event's data. The
-returned hash is a B<copy>; modifying it will not affect the live event.
-C<shared_scalars> is an arrayref of hex key strings; use the scalar
-reference returned by L</shared_scalar> to read or write values.
+Returns a hash reference containing a snapshot of the event's data. The returned
+hash is a B<copy>; modifying it will not affect the live event.
+C<shared_scalars> is an arrayref of hex key strings; use the scalar reference
+returned by L</shared_scalar> to read or write values.
 
 The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
 
@@ -958,9 +1022,9 @@ process; provided for diagnostic purposes only)
 
 =back
 
-Use L</status> and L</error> to determine which state applies; do not
-interpret the integer value beyond "some past or current child PID".
-Prior versions returned the magic value C<-99> after a crash; that
+B<Note>: Use L</status> and L</error> to determine which state applies;
+B<do not> interpret the PID integer value beyond "some past or current child
+PID". Prior versions returned the magic value C<-99> after a crash; that
 sentinel has been retired in favor of L</error>.
 
 =head2 runs
@@ -984,6 +1048,7 @@ C<start()> repeatedly for numerous individual/one-off runs.
 
     # waiting() probes the child process; returns true once the
     # one-shot has finished, allowing a clean restart
+
     $event->start if $event->waiting;
 
 =head2 Change delay interval during operation
@@ -1005,38 +1070,28 @@ times
         #... do stuff
     }
 
-=head2 Event error management
+=head2 Closures and lexical variables
 
-If an event crashes, print out error information and restart the event. If an
-event crashes five or more times, print the most recent error message and halt
-the program so you can figure out what's wrong with your callback code.
+When a callback closes over a lexical variable, the child process sees the value
+that existed at the moment of C<fork>. For one-shot events (interval C<0>), each
+C<start()> forks a fresh child, so changes to the lexical between calls are
+visible:
 
-    use Async::Event::Interval
+    use Async::Event::Interval;
 
-    my $event = Async::Event::Interval->new(5, sub {print "hey\n";});
+    my $msg = "first run";
+    my $e = Async::Event::Interval->new(0, sub { print "$msg\n"; });
 
-    $event->start;
+    $e->start;       # prints "first run"
+    select(undef, undef, undef, 0.3);
 
-    while (1) {
+    $msg = "second run";
+    $e->start;       # prints "second run"
 
-        #... do stuff
-
-        if ($event->errors >= 5) {
-            print $event->error_message;
-            exit;
-        }
-
-        if ($event->error) {
-            printf(
-                "Runs: %d, Runs errored: %d, Last error message: %s\n",
-                $event->runs,
-                $event->errors,
-                $event->error_message;
-            );
-
-            $event->restart;
-        }
-    }
+B<Note>: For interval events (interval > 0), the child is forked once on the
+first C<start()> and loops. Parent-side changes to closed-over lexicals will
+never be seen by the already-running child. Use L</shared_scalar> or
+C<start(@params)> for data that must cross process boundaries mid-run.
 
 =head2 Per callback execution parameters
 
@@ -1098,41 +1153,6 @@ For shared variables, see L</shared_scalar>.
         my ($one, $two, $three) = @_;
         print "$one, $two, $three\n";
     }
-
-=head2 Event crash: Restart event
-
-    use warnings;
-    use strict;
-
-    use Async::Event::Interval;
-
-    # kill 9, $$ is a contrived self-kill to demonstrate crash detection
-    my $event = Async::Event::Interval->new(0.5, sub { kill 9, $$; });
-
-    $event->start;
-
-    sleep 1; # Do stuff
-
-    if ($event->error){
-        print "Event crashed, restarting\n";
-        $event->restart;
-    }
-
-=head2 Event crash: End program
-
-    use warnings;
-    use strict;
-
-    use Async::Event::Interval;
-
-    # kill 9, $$ is a contrived self-kill to demonstrate crash detection
-    my $event = Async::Event::Interval->new(0.5, sub { kill 9, $$; });
-
-    $event->start;
-
-    sleep 1; # Do stuff
-
-    die "Event crashed, can't continue" if $event->error;
 
 =head2 Shared data across events
 
@@ -1200,9 +1220,79 @@ L</shared_scalar> instead.
         $shared_data{$$}++;
     }
 
+=head2 Event error management
+
+If an event crashes, print out error information and restart the event. If an
+event crashes five or more times, print the most recent error message and halt
+the program so you can figure out what's wrong with your callback code.
+
+    use Async::Event::Interval
+
+    my $event = Async::Event::Interval->new(5, sub {print "hey\n";});
+
+    $event->start;
+
+    while (1) {
+
+        #... do stuff
+
+        if ($event->errors >= 5) {
+            print $event->error_message;
+            exit;
+        }
+
+        if ($event->error) {
+            printf(
+                "Runs: %d, Runs errored: %d, Last error message: %s\n",
+                $event->runs,
+                $event->errors,
+                $event->error_message;
+            );
+
+            $event->restart;
+        }
+    }
+
+=head2 Event crash: Restart event
+
+    use warnings;
+    use strict;
+
+    use Async::Event::Interval;
+
+    # kill 9, $$ is a contrived self-kill to demonstrate crash detection
+
+    my $event = Async::Event::Interval->new(0.5, sub { kill 9, $$; });
+
+    $event->start;
+
+    sleep 1; # Do stuff
+
+    if ($event->error){
+        print "Event crashed, restarting\n";
+        $event->restart;
+    }
+
+=head2 Event crash: End program
+
+    use warnings;
+    use strict;
+
+    use Async::Event::Interval;
+
+    # kill 9, $$ is a contrived self-kill to demonstrate crash detection
+
+    my $event = Async::Event::Interval->new(0.5, sub { kill 9, $$; });
+
+    $event->start;
+
+    sleep 1; # Do stuff
+
+    die "Event crashed, can't continue" if $event->error;
+
 =head2 Immediate first execution
 
-Set C<immediate> to have the callback fire right away on C<start>, then repeat
+Set C<immediate> to have the callback fire right away on C<start()>, then repeat
 at the regular interval thereafter:
 
     use Async::Event::Interval;
@@ -1214,28 +1304,26 @@ at the regular interval thereafter:
     sleep 10;
     $event->stop;
 
-=head2 Closures and lexical variables
+=head2 Event suicidal timeout
 
-When a callback closes over a lexical variable, the child process sees the
-value that existed at the moment of C<fork>. For one-shot events (interval
-C<0>), each C<start()> forks a fresh child, so changes to the lexical
-between calls are visible:
+Built in is the ability to have the event C<die()> if a timeout threshold is
+breached. A timeout is set with L<timeout()|/timeout($seconds)>. It can be set
+at any time; before the first C<start()> call, or if after, the setting will be
+picked up on the next event C<restart()>.
 
     use Async::Event::Interval;
 
-    my $msg = "first run";
-    my $e = Async::Event::Interval->new(0, sub { print "$msg\n"; });
+    my $event = Async::Event::Interval->new(60, sub { sleep 9; });
+    $event->timeout(8);
 
-    $e->start;       # prints "first run"
-    select(undef, undef, undef, 0.3);
+    $event->start;
 
-    $msg = "second run";
-    $e->start;       # prints "second run"
-
-For interval events (interval > 0), the child is forked once on the first
-C<start()> and loops. Parent-side changes to closed-over lexicals will
-never be seen by the already-running child. Use L</shared_scalar> or
-C<start(@params)> for data that must cross process boundaries mid-run.
+    while (1) {
+        if ($event->error =~ /Callback timed out/) {
+            print "Event callback timed out... exiting to troubleshoot\n";
+            exit;
+        }
+    }
 
 =head1 AUTHOR
 

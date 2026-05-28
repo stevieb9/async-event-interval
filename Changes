@@ -97,6 +97,10 @@ Revision history for Async-Event-Interval
       finish(0) so the parent can distinguish normal completion from a crash
     - Fix flaky t/90 on macOS CI by replacing nested-hash shared memory
       writes with flat keys, eliminating child-segment race between forks
+    - Fix shared memory leak on SIGINT/SIGTERM: install signal handlers
+      that run _end() cleanup before re-raising; _end() now unconditionally
+      stops children and removes protected segments instead of skipping
+      when _event_count > 0
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()
