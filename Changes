@@ -105,6 +105,7 @@ Revision history for Async-Event-Interval
       into per-phase evals so each cleanup step runs even when an earlier one
       times out; add @all_pids fallback so children are killed even when the
       %events read-lock is stuck
+    - Add 'error' and 'waiting' fields to events() and info() snapshots
 
 1.13    2024-03-04
     - Added ability to send in per-callback call parameters via the start()

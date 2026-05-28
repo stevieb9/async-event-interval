@@ -64,7 +64,7 @@ sub new {
         my $id = $events{_id_counter}++;
         $events{_event_count}++;
         $self->id($id);
-        $events{$id} = {};
+        $events{$id} = { error => 0 };
     });
 
     $self->_pm;
@@ -97,7 +97,15 @@ sub events {
                 next if $k =~ /^_/;
                 $filtered{$k} = $event->{$k};
             }
+
+            my $pid   = $event->{pid};
+            my $error = $event->{error} || 0;
+
+            $filtered{error}   = $error;
+            $filtered{waiting} = ($error || ! $pid || ! kill(0, $pid)) ? 1 : 0;
+
             $copy{$id} = \%filtered;
+
             if ($copy{$id}{shared_scalars}) {
                 $copy{$id}{shared_scalars} = [ @{ $copy{$id}{shared_scalars} } ];
             }
@@ -119,6 +127,13 @@ sub info {
             next if $k =~ /^_/;
             $copy{$k} = $event->{$k};
         }
+
+        my $pid   = $event->{pid};
+        my $error = $event->{error} || 0;
+
+        $copy{error}   = $error;
+        $copy{waiting} = ($error || ! $pid || ! kill(0, $pid)) ? 1 : 0;
+
         $copy{shared_scalars} = [ @{ $copy{shared_scalars} } ]
             if $copy{shared_scalars};
         return \%copy;
@@ -197,11 +212,15 @@ sub start {
         warn "Event already running...\n";
         return;
     }
+
     $self->_crashed(0);
+
     _events_write(sub {
         delete $events{$self->id}{_stop_requested};
         delete $events{$self->id}{_clean_exit};
+        $events{$self->id}{error} = 0;
     });
+
     $self->_started(1);
     $self->_event(@callback_params);
 }
@@ -334,6 +353,7 @@ sub _detect_crash {
         }
         else {
             $self->_crashed(1);
+            _events_write(sub { $events{$self->id}{error} = 1 });
         }
     }
 }
@@ -405,6 +425,9 @@ sub _event {
             if (! $exit_code) {
                 _events_write(sub {$events{$self->id}{_clean_exit} = 1});
             }
+            else {
+                _events_write(sub {$events{$self->id}{error} = 1});
+            }
 
             $self->_pm->finish($exit_code);
         }
@@ -415,6 +438,9 @@ sub _event {
 
             if (! $exit_code) {
                 _events_write(sub {$events{$self->id}{_clean_exit} = 1});
+            }
+            else {
+                _events_write(sub {$events{$self->id}{error} = 1});
             }
 
             $self->_pm->finish($exit_code);
@@ -858,6 +884,10 @@ C<restart()> command. Returns false if the event is already running.
 B<Side effect>: calls C</error()> and C<status()> internally, both of which
 probe the child process (see those methods for details).
 
+The same state is also surfaced as the C<waiting> field in L</events> and
+L</info> snapshots, where it can be read without the side effects of this
+method.
+
 =head2 error
 
 Returns true if an event crashed unexpectedly in the background, and is ready
@@ -867,6 +897,10 @@ an error state.
 B<Side effect>: calling C<error()> runs the same crash probe documented
 under L</status>. The event's internal flags and PID may be mutated as a
 side effect of this call.
+
+The same state is also surfaced as the C<error> field in L</events> and
+L</info> snapshots, where it can be read without the side effects of this
+method (and without per-object access).
 
 See L</errors> for the crash count.
 
@@ -998,6 +1032,8 @@ The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
             'pid'       => 11859,
             'runs'      => 16,
             'errors'    => 0,
+            'error'     => 0,
+            'waiting'   => 0,
             'interval'  => 5,
             'shared_scalars' => [
                 '0x4a3f2c1b5d6e',
@@ -1008,10 +1044,18 @@ The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
             'pid'           => 11860,
             'runs'          => 447,
             'errors'        => 2,
+            'error'         => 1,
+            'waiting'       => 1,
             'interval'      => 0.6,
             'error_message' => 'File notes.txt not found at scripts/write_file.pl line 227',
         }
     };
+
+C<error> is C<1> if the event is currently stopped because its callback
+died (mirrors L</error>), C<0> otherwise. C<waiting> is C<1> if the event
+is dormant and ready for a L</start>/L</restart> call (mirrors L</waiting>),
+C<0> if it is currently running. See L</info> for the full lifecycle state
+table.
 
 =head2 id
 
@@ -1030,12 +1074,36 @@ The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
         'pid'      => 6841,
         'runs'     => 4077,
         'errors'   => 0,
+        'error'    => 0,
+        'waiting'  => 0,
         'interval' => 1.4,
         'shared_scalars' => [
             '0x4a3f2c1b5d6e',
             '0x7f8e9d0c1b2a'
         ],
     };
+
+The C<error> and C<waiting> fields mirror the L</error> and L</waiting>
+methods but can be read from any process holding a reference to the
+C<%events> hash without the side effects of those methods. C<error> is a
+B<stored> flag (written by the child when its callback dies, or by
+C<_detect_crash> on the next probe for externally-killed children).
+C<waiting> is B<derived> on every snapshot from C<pid>, C<error>, and a
+C<kill(0, $pid)> liveness probe, so it always reflects the current state.
+
+The following table summarises the values across the event lifecycle:
+
+    State                                              error   waiting
+    -----------------------------------------------------------------
+    Just instantiated, never started                     0        1
+    Currently running                                    0        0
+    Stopped cleanly via stop()                           0        1
+    One-shot finished cleanly                            0        1
+    Callback died (interval mode)                        1        1
+    Callback died (one-shot)                             1        1
+    timeout() fired (callback alarmed out)               1        1
+    External `kill -9` of the child                      1        1
+    Restarted after a crash                              0        0
 
 =head2 pid
 

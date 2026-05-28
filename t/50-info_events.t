@@ -22,7 +22,7 @@ my $mod = 'Async::Event::Interval';
     for (keys %$events) {
         like $_, qr/^\w+$/, "Events key $_ is a word ok";
         is ref $events->{$_}, 'HASH', "Event $_ is a hash ref ok";
-        is keys %{ $events->{$_} }, 1, "After creation, event $_ hash has a single entry";
+        is keys %{ $events->{$_} }, 3, "After creation, event $_ hash has error/waiting plus interval";
     }
 
     $one->start;
@@ -36,7 +36,7 @@ my $mod = 'Async::Event::Interval';
         like $_, qr/^\d+$/, "Events key $_ is still an integer ok";
         is $events->{$_}{runs} > 0, 1, "Event $_ has a 'runs' key set ok";
         is ref $events->{$_}, 'HASH', "Event $_ is still a hash ref ok";
-        is keys %{ $events->{$_} }, 3, "After creation, event $_ hash has 3 keys";
+        is keys %{ $events->{$_} }, 5, "After creation, event $_ hash has 5 keys";
         like $events->{$_}{pid}, qr/^\d+$/, "Event $_ has pid key with a proper PID";
         like $events->{$_}{interval}, qr/^(\d+\.)?\d+$/, "Event $_ has interval key with a proper interval";
     }
@@ -51,7 +51,7 @@ my $mod = 'Async::Event::Interval';
     for (keys %$events) {
         like $_, qr/^\d+$/, "Events key $_ is still an integer ok";
         is ref $events->{$_}, 'HASH', "Event $_ is still a hash ref ok";
-        is keys %{ $events->{$_} }, 4, "After creation, event $_ hash has proper number of keys ok";
+        is keys %{ $events->{$_} }, 6, "After creation, event $_ hash has proper number of keys ok";
         like $events->{$_}{pid}, qr/^\d+$/, "Event $_ has pid key with a proper PID";
         is ref $events->{$_}{shared_scalars}, 'ARRAY', "Event $_ has shared_scalars arrayref";
         is scalar @{ $events->{$_}{shared_scalars} }, 2, "Event $_ has two shared scalars";

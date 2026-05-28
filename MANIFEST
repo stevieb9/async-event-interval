@@ -31,11 +31,13 @@ t/52-continue.t
 t/53-timeout.t
 t/55-shared_event_state.t
 t/60-error_handling.t
+t/61-error_and_waiting_fields.t
 t/65-protected_option_for_events_hash_default.t
 t/66-protected_option_for_events_hash_mock.t
 t/67-protected_option_for_events_hash_cleanup.t
 t/90-two_events_leak_seg.t
 t/91-signal_no_leak.t
+t/92-end_phased_cleanup.t
 t/99-end.t
 t/lib/TestHelper.pm
 t/manifest.t
