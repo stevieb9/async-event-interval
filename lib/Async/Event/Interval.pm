@@ -341,6 +341,7 @@ sub _detect_crash {
 
     # Cheap short-circuits: nothing to detect if the event is already
     # known stopped, or if pid is unset / already cleared.
+
     return unless $self->_started;
     return unless $self->pid && $self->pid > 0;
 
@@ -680,8 +681,21 @@ sub _end {
     });
 
     # Phase 4: Release IPC segments (1 second timeout).
+    #
+    # IPC::Shareable's STORE on a nested hashref/arrayref creates child
+    # segments and calls _remove_child on the previous value. When a forked
+    # child does that during its callback, the parent's global_register still
+    # lists the now-dead child segments. clean_up_protected then re-removes
+    # them and shmctl() returns EINVAL. The cleanup itself is correct (seg
+    # count returns to baseline); only the warning is spurious, so filter it.
 
     _alarmed_eval(1, sub {
+        local $SIG{__WARN__} = sub {
+            my $msg = shift;
+            return if $msg =~ /Couldn't remove (?:shm segment|semaphore set) \d+: Invalid argument/;
+            return if $msg =~ /Use of uninitialized value \$sem_remove_status/;
+            warn $msg;
+        };
         IPC::Shareable::clean_up_protected(_shm_lock());
     });
 }
@@ -749,9 +763,9 @@ Async::Event::Interval - Scheduled and one-off restartable asynchronous events
 =head1 SYNOPSIS
 
 Here's an example of a simple asynchronous event that fetches JSON data from a
-website every two seconds using a shared scalar variable, while allowing the
-main application to continue running in the foreground. Multiple events can be
-used simultaneously if desired.
+website every two seconds using a shared scalar variable to hold the decoded
+JSON hashref, while allowing the main application to continue running in the
+foreground. Multiple events can be used simultaneously if desired.
 
 See the L</SCENARIOS/EXAMPLES> section for further usage examples.
 
@@ -759,25 +773,34 @@ See the L</SCENARIOS/EXAMPLES> section for further usage examples.
     use strict;
 
     use Async::Event::Interval;
+    use JSON;
 
     my $event = Async::Event::Interval->new(2, \&callback);
 
-    my $json = $event->shared_scalar;
+    my $api_data_href = $event->shared_scalar;
 
     $event->start;
 
     while (1) {
-        print "$$json\n";
 
-        #... do other things
+        if ($$api_data_href) {
+            print "Element 1 of 'data' dict is $$api_data_href->{data}[1]\n";
+            # ...do other things with data
+        }
 
-        $event->restart if $event->error;
+        # ...do other things
+
+        if ($event->error) {
+            print $event->error_message;
+            $event->restart;
+        }
     }
 
     sub callback {
-        my $content = get_webpage_content();
-        $$json = decode_json($content);
+        my $api_json = some_web_api_call(); # '{"data": [1, 2, 3]}';
+        $$api_data_href = decode_json($api_json);
     }
+
 
 =head1 DESCRIPTION
 
@@ -976,8 +999,43 @@ Returns a reference to a scalar variable that can be shared between the main
 process and the events. This reference can be used within multiple events, and
 multiple shared scalars can be created by each event.
 
-To read from or assign to the returned scalar, you must dereference it. Eg.
-C<$$shared_scalar = 1;>.
+To read from or assign to the returned scalar, dereference it:
+
+    $$s = 42;              # plain number
+    $$s = 'some string';   # plain string
+    $$s = { key => 'v' };  # hashref
+    $$s = [1, 2, 3];       # arrayref
+
+B<Supported values>: Internally L<IPC::Shareable> serializes to JSON by
+default, so values must be JSON-representable: scalars (strings/numbers),
+arrayrefs, hashrefs, and combinations of those. Blessed objects, code
+references, regex references, and globs are B<not> supported and will be
+silently lost or corrupt the segment.
+
+Nested references work transparently and cleanup is automatic. Note that
+under the hood, each nested hashref/arrayref allocates its own child
+shared-memory segment, so very deeply nested structures consume one shm
+segment per node:
+
+    $$s = { config => { db => { host => 'localhost', port => 5432 } } };
+
+    my $host = $$s->{config}{db}{host};   # 'localhost'
+
+B<Updating a stored hashref>: When extending a hashref already in the scalar,
+either build a fresh hashref from the spread of the current value, or mutate
+through the dereference directly. Do not fetch the reference into a lexical,
+mutate it, and store it back: that pattern corrupts the segment because the
+fetched reference still carries C<IPC::Shareable>'s tied magic, and
+re-storing a tied value into its own parent breaks the serialization:
+
+    # Reliable: assign a newly constructed hashref
+    $$s = { %{$$s}, new_key => 'val' };
+
+    # Also reliable: direct dereferenced mutation
+    $$s->{new_key} = 'val';
+
+    # Unreliable: re-storing a fetched reference corrupts the segment
+    # my $h = $$s; $h->{new_key} = 'val'; $$s = $h;
 
 B<Lifetime>: The underlying shared memory segment is owned by the event object
 that created it. When the event goes out of scope (and its C<DESTROY> runs),
