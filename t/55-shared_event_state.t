@@ -4,6 +4,7 @@ use warnings;
 use lib 't/lib';
 use TestHelper;
 use Test::More;
+use Time::HiRes ();
 
 use Async::Event::Interval;
 
@@ -14,7 +15,12 @@ my $mod = 'Async::Event::Interval';
     my $e = $mod->new(0.1, sub {});
 
     $e->start;
-    select(undef, undef, undef, 0.7);
+
+    my $deadline = Time::HiRes::time() + 5;
+    while ($e->runs < 3 && Time::HiRes::time() < $deadline) {
+        select(undef, undef, undef, 0.05);
+    }
+
     $e->stop;
 
     my $method_runs = $e->runs;

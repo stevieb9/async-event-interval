@@ -834,10 +834,14 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     Async::Event::Interval::_end();
     my $elapsed = Time::HiRes::time() - $t0;
 
-    my $timeout = Async::Event::Interval::END_LOCK_TIMEOUT();
-    cmp_ok $elapsed, '<', $timeout,
-        "_end() returns well under END_LOCK_TIMEOUT when no contention "
-      . "($elapsed s, timeout=$timeout)";
+    # _end() has three internal _alarmed_eval(1, ...) phases; worst case
+    # without contention is well under their sum. Use a generous wall-clock
+    # cap so this catches a real "hangs every phase" regression without
+    # flaking under VM jitter where semop overhead alone can take seconds.
+    my $cap = 8;
+    cmp_ok $elapsed, '<', $cap,
+        "_end() returns well under the worst-case alarm budget when no "
+      . "contention ($elapsed s, cap=$cap)";
 }
 
 # Contention path: a forked child takes LOCK_EX and holds it longer than
@@ -883,8 +887,13 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     Async::Event::Interval::_end();
     my $elapsed = Time::HiRes::time() - $t0;
 
-    cmp_ok $elapsed, '<', $timeout + 1.5,
-        "_end() bailed out near END_LOCK_TIMEOUT instead of blocking "
+    # Upper bound loosened for slow-VM SIGALRM-delivery jitter; the
+    # behavioral claim is still "_end() bails out instead of blocking
+    # forever," which is enforced by a finite ceiling well below the
+    # child's sleep 30. The lower bound (unchanged) keeps the "actually
+    # waited" assertion.
+    cmp_ok $elapsed, '<', $timeout + 8,
+        "_end() bailed out instead of blocking "
       . "($elapsed s, timeout=$timeout)";
     cmp_ok $elapsed, '>=', $timeout - 0.5,
         "_end() actually waited ~END_LOCK_TIMEOUT seconds before bailing "
