@@ -1522,6 +1522,156 @@ be set at any time; it will be picked up on each iteration of your callback.
         }
     }
 
+=head2 Shared scalar
+
+L<shared_scalar()|/shared_scalar> returns a tied scalar reference whose value
+lives in shared memory and is visible to the parent and to event callbacks.
+The sub-sections below show common usage patterns; see
+L<shared_scalar()|/shared_scalar> for the API reference and constraints.
+
+=head3 Storing simple types
+
+A shared scalar can hold any JSON-representable value: scalars, arrayrefs,
+hashrefs, or combinations thereof.
+
+    use Async::Event::Interval;
+
+    my $event = Async::Event::Interval->new(0, sub {});
+    my $s     = $event->shared_scalar;
+
+    $$s = 42;
+    $$s = 'hello';
+    $$s = [1, 2, 3];
+    $$s = { lang => 'Perl' };
+
+    print "$$s->{lang}\n";
+
+=head3 Event writes, parent reads
+
+An event populates the scalar in the background; the parent reads it after
+the callback finishes.
+
+    use Async::Event::Interval;
+
+    my $s;
+    my $event = Async::Event::Interval->new(0, sub {
+        $$s = { name => 'alice', score => 42 };
+    });
+    $s = $event->shared_scalar;
+
+    $event->start;
+    $event->wait;
+
+    print "$$s->{name}: $$s->{score}\n";
+
+=head3 Updating a stored hashref
+
+When extending a hashref already in the scalar, either build a fresh hashref
+with the spread of the current value, or mutate through the dereference
+directly:
+
+    $$s = { a => 1, b => 2 };
+
+    # Spread idiom
+    $$s = { %{$$s}, c => 3 };
+
+    # Direct dereferenced mutation
+    $$s->{d} = 4;
+
+B<Do not> fetch the reference into a lexical, mutate it, and store it back
+(C<< my $h = $$s; $h->{x} = 1; $$s = $h; >>) - that pattern corrupts the
+segment. See L<shared_scalar()|/shared_scalar> for the full rules.
+
+=head3 Two events sharing a scalar
+
+Multiple events can read/write the same shared scalar via closure. The
+segment is owned by the event that created it; other events reference it
+through the closed-over variable.
+
+    use Async::Event::Interval;
+
+    my $s;
+    my $event_a = Async::Event::Interval->new(0, sub {
+        $$s = { source => 'A', value => 100 };
+    });
+    $s = $event_a->shared_scalar;
+
+    my $event_b = Async::Event::Interval->new(0, sub {
+        $$s = { %{$$s}, source => 'B' };
+    });
+
+    $event_a->start; $event_a->wait;
+    $event_b->start; $event_b->wait;
+
+    print "source=$$s->{source} value=$$s->{value}\n";
+
+=head3 Multiple scalars on one event
+
+One event can own several shared scalars - for example, one for input the
+callback reads and one for results the parent reads back.
+
+    use Async::Event::Interval;
+
+    my ($s_in, $s_out);
+    my $event = Async::Event::Interval->new(0, sub {
+        $$s_out = { sum => $$s_in->{a} + $$s_in->{b} };
+    });
+    $s_in  = $event->shared_scalar;
+    $s_out = $event->shared_scalar;
+
+    $$s_in = { a => 3, b => 4 };
+
+    $event->start;
+    $event->wait;
+
+    print "sum=$$s_out->{sum}\n";
+
+=head3 Periodic background writes
+
+An interval event writes to the shared scalar on each tick; the parent reads
+the latest value at its own pace.
+
+    use Async::Event::Interval;
+
+    my $s;
+    my $event = Async::Event::Interval->new(1, sub {
+        my $prev = ($$s && $$s->{count}) || 0;
+        $$s = { time => scalar localtime, count => $prev + 1 };
+    });
+    $s = $event->shared_scalar;
+
+    $event->start;
+
+    for (1..5) {
+        sleep 1;
+        print "$$s->{time} (tick $$s->{count})\n" if $$s;
+    }
+
+    $event->stop;
+
+=head2 Wait for one-shot completion
+
+Use L<wait()|/wait($interval)> to block until the event becomes dormant
+instead of writing the poll loop by hand. C<wait()> returns whether the
+event finished cleanly or crashed; inspect L</error> after it returns to
+distinguish the two.
+
+    use Async::Event::Interval;
+
+    my $event = Async::Event::Interval->new(0, sub {
+        select(undef, undef, undef, 0.5);   # simulate work
+        print "callback done\n";
+    });
+
+    $event->start;
+    $event->wait;                           # blocks until the callback finishes
+
+    die "callback crashed: " . $event->error_message if $event->error;
+
+Pass a poll interval to tune responsiveness (default is C<0.01>):
+
+    $event->wait(0.001);                    # fine-grained polling
+
 =head1 AUTHOR
 
 Steve Bertrand, C<< <steveb at cpan.org> >>
