@@ -86,7 +86,15 @@ sub _dead_pid {
     my $e = Async::Event::Interval->new(0.05, sub { $runs++ });
     $e->start;
 
-    select(undef, undef, undef, 0.15);
+    # Poll for the first run rather than sleeping a fixed window. On a
+    # loaded CI runner the child can be scheduled later than the 0.05s
+    # interval, so a fixed wait races stop()'s _stop_requested flag and
+    # the loop exits before firing the callback even once.
+    my $deadline = Time::HiRes::time() + 5;
+    while (Time::HiRes::time() < $deadline) {
+        last if $e->runs;
+        select(undef, undef, undef, 0.01);
+    }
 
     my $pid = $e->pid;
     ok $pid, "event has a pid while running";
@@ -114,14 +122,22 @@ sub _dead_pid {
     my $e = Async::Event::Interval->new(0.05, sub {});
     $e->start;
 
-    select(undef, undef, undef, 0.3);
+    my $deadline = Time::HiRes::time() + 5;
+    while (Time::HiRes::time() < $deadline) {
+        last if $e->runs;
+        select(undef, undef, undef, 0.01);
+    }
     $e->stop;
 
     my $runs_before = $e->runs;
     cmp_ok $runs_before, '>', 0, "ran before first stop";
 
     $e->start;
-    select(undef, undef, undef, 0.5);
+    $deadline = Time::HiRes::time() + 5;
+    while (Time::HiRes::time() < $deadline) {
+        last if $e->runs > $runs_before;
+        select(undef, undef, undef, 0.01);
+    }
     $e->stop;
 
     my $runs_after = $e->runs;
