@@ -4,10 +4,28 @@ use warnings;
 use lib 't/lib';
 use TestHelper;
 use Test::More;
+use Time::HiRes ();
 
 use Async::Event::Interval;
 
 my $mod = 'Async::Event::Interval';
+
+# Poll-until-condition with a wall-clock deadline. Replaces fixed select()
+# sleeps in blocks that wait for an asynchronous state transition (callback
+# crash registers, restart clears flag, etc.) so the tests are robust on
+# slow VMs without inflating wall-clock on healthy runs. Returns 1 on
+# condition met, 0 on deadline hit.
+
+sub poll_until {
+    my ($cond, $timeout) = @_;
+    $timeout //= 5;
+    my $deadline = Time::HiRes::time() + $timeout;
+    while (! $cond->()) {
+        return 0 if Time::HiRes::time() >= $deadline;
+        select(undef, undef, undef, 0.05);
+    }
+    return 1;
+}
 
 # --- 'error' field --------------------------------------------------------
 
@@ -34,7 +52,7 @@ my $mod = 'Async::Event::Interval';
 {
     my $e = $mod->new(0, sub { die "boom\n" });
     $e->start;
-    select(undef, undef, undef, 0.4);
+    poll_until(sub { $e->info->{error} == 1 });
     is $e->info->{error}, 1, "one-shot crash: info() error=1";
     my $snap = $mod->events;
     is $snap->{$e->id}{error}, 1, "one-shot crash: events() error=1";
@@ -44,7 +62,7 @@ my $mod = 'Async::Event::Interval';
 {
     my $e = $mod->new(0.1, sub { die "boom\n" });
     $e->start;
-    select(undef, undef, undef, 0.5);
+    poll_until(sub { $e->info->{error} == 1 });
     is $e->info->{error}, 1, "interval crash: info() error=1";
     my $snap = $mod->events;
     is $snap->{$e->id}{error}, 1, "interval crash: events() error=1";
@@ -54,7 +72,7 @@ my $mod = 'Async::Event::Interval';
 {
     my $e = $mod->new(0, sub { die "boom\n" });
     $e->start;
-    select(undef, undef, undef, 0.4);
+    poll_until(sub { $e->info->{error} == 1 });
     is $e->info->{error}, 1, "persistent error: first snapshot";
     select(undef, undef, undef, 0.2);
     is $e->info->{error}, 1, "persistent error: second snapshot still 1";
@@ -64,14 +82,14 @@ my $mod = 'Async::Event::Interval';
 # Uses a slow interval so we can observe error=0 in the window before
 # the next iteration fires and crashes again.
 {
-    my $e = $mod->new(0.5, sub { die "boom\n" });
+    my $e = $mod->new(2, sub { die "boom\n" });
     $e->start;
-    select(undef, undef, undef, 0.6);
+    poll_until(sub { $e->info->{error} == 1 });
     is $e->info->{error}, 1, "after crash: error=1";
 
     $e->error;        # clears _started so restart() proceeds
     $e->restart;
-    select(undef, undef, undef, 0.1);
+    select(undef, undef, undef, 0.2);
     is $e->info->{error}, 0, "right after restart: error=0 (cleared)";
 
     $e->stop;
@@ -82,7 +100,7 @@ my $mod = 'Async::Event::Interval';
     my $e = $mod->new(0, sub { select(undef, undef, undef, 5) });
     $e->timeout(1);
     $e->start;
-    select(undef, undef, undef, 2);
+    poll_until(sub { $e->info->{error} == 1 });
     is $e->info->{error}, 1, "timeout breach: info() error=1";
 }
 
@@ -114,13 +132,13 @@ my $mod = 'Async::Event::Interval';
 {
     my $e = $mod->new(0, sub { die "boom\n" });
     $e->start;
-    select(undef, undef, undef, 0.4);
+    poll_until(sub { $e->errors == 1 });
     is $e->errors, 1, "first crash: errors=1";
     is $e->info->{error}, 1, "first crash: error=1";
 
     $e->error;   # clears _started so restart() works
     $e->restart;
-    select(undef, undef, undef, 0.4);
+    poll_until(sub { $e->errors == 2 });
     is $e->errors, 2, "second crash: errors=2 (cumulative)";
     is $e->info->{error}, 1, "second crash: error=1 (current)";
 }
@@ -142,7 +160,7 @@ my $mod = 'Async::Event::Interval';
 {
     my $e = $mod->new(0, sub { die "boom\n" });
     $e->start;
-    select(undef, undef, undef, 0.4);
+    poll_until(sub { $e->info->{error} == 1 });
     my $method = $e->error ? 1 : 0;
     is $e->info->{error}, $method,
         "snapshot error matches error() method ($method)";
@@ -190,7 +208,7 @@ my $mod = 'Async::Event::Interval';
 {
     my $e = $mod->new(0, sub { die "boom\n" });
     $e->start;
-    select(undef, undef, undef, 0.4);
+    poll_until(sub { $e->info->{error} == 1 });
     is $e->info->{waiting}, 1, "crashed: info() waiting=1";
     is $e->info->{error},   1, "crashed: info() error=1";
 }
@@ -200,7 +218,7 @@ my $mod = 'Async::Event::Interval';
     my $e = $mod->new(0, sub { select(undef, undef, undef, 5) });
     $e->timeout(1);
     $e->start;
-    select(undef, undef, undef, 2);
+    poll_until(sub { $e->info->{waiting} == 1 });
     is $e->info->{waiting}, 1, "timeout breach: info() waiting=1";
 }
 
