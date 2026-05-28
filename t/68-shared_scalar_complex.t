@@ -47,7 +47,7 @@ my $mod = 'Async::Event::Interval';
 }
 
 # 2. Event writes a hashref; parent reads all fields once the one-shot
-#    event completes (interval=0, poll waiting()).
+#    event completes (interval=0, wait() blocks until dormant).
 {
     my $s;
     my $e = $mod->new(0, sub {
@@ -56,7 +56,7 @@ my $mod = 'Async::Event::Interval';
     $s = $e->shared_scalar;
 
     $e->start;
-    while (! $e->waiting) {}
+    $e->wait;
 
     is ref($$s),      'HASH',  "event-written hashref: ref() is HASH in parent";
     is $$s->{name},   'alice', "event-written hashref: 'name' field correct";
@@ -73,7 +73,7 @@ my $mod = 'Async::Event::Interval';
     $s = $e->shared_scalar;
 
     $e->start;
-    while (! $e->waiting) {}
+    $e->wait;
 
     is ref($$s),       'ARRAY', "event-written arrayref: ref() is ARRAY in parent";
     is $$s->[0],       'red',   "arrayref element [0] correct";
@@ -97,7 +97,7 @@ my $mod = 'Async::Event::Interval';
     $$s_input = { greeting => 'hello', count => 7 };
 
     $e->start;
-    while (! $e->waiting) {}
+    $e->wait;
 
     is $$s_result->{greeting_ok}, 1, "event correctly read parent-written 'greeting' field";
     is $$s_result->{count_ok},    1, "event correctly read parent-written 'count' field";
@@ -118,10 +118,10 @@ my $mod = 'Async::Event::Interval';
     });
 
     $event_a->start;
-    while (! $event_a->waiting) {}
+    $event_a->wait;
 
     $event_b->start;
-    while (! $event_b->waiting) {}
+    $event_b->wait;
 
     is ref($$s),        'HASH', "two-event exchange: result is a HASH ref";
     is $$s->{source},   'B',    "event B's 'source' overwrote event A's";
@@ -146,10 +146,10 @@ my $mod = 'Async::Event::Interval';
     $$s = { written_by => 'parent' };
 
     $event_a->start;
-    while (! $event_a->waiting) {}
+    $event_a->wait;
 
     $event_b->start;
-    while (! $event_b->waiting) {}
+    $event_b->wait;
 
     is $$s->{written_by}, 'parent', "parent's initial key survives both events";
     is $$s->{event_a},    'done',   "event A's key is present in final hashref";
@@ -189,7 +189,7 @@ my $mod = 'Async::Event::Interval';
     $s = $e->shared_scalar;
 
     $e->start;
-    while (! $e->waiting) {}
+    $e->wait;
 
     is ref($$s),                     'HASH',           "3-level (event): level 1 is HASH ref";
     is ref($$s->{config}),           'HASH',           "3-level (event): level 2 is HASH ref";
@@ -215,12 +215,12 @@ my $mod = 'Async::Event::Interval';
     });
 
     $event_a->start;
-    while (! $event_a->waiting) {}
+    $event_a->wait;
 
     is $$s->{a}{b}{c}, 'from_A', "before event B: event A's 3-level leaf readable in parent";
 
     $event_b->start;
-    while (! $event_b->waiting) {}
+    $event_b->wait;
 
     is ref($$s),       'HASH',       "after event B: result is a HASH ref";
     is $$s->{x}{y}{z}, 'got:from_A', "event B's 3-level leaf reflects value it read from event A";
@@ -344,7 +344,7 @@ my $mod = 'Async::Event::Interval';
     $s = $e->shared_scalar;
 
     $e->start;
-    while (! $e->waiting) {}
+    $e->wait;
 
     my $r = eval { ref($$s) } // 'fetch_died';
     isnt $r, 'MyTestClass',
@@ -362,7 +362,7 @@ my $mod = 'Async::Event::Interval';
     $s = $e->shared_scalar;
 
     $e->start;
-    while (! $e->waiting) {}
+    $e->wait;
 
     my $r = eval { ref($$s) } // 'fetch_died';
     isnt $r, 'CODE',
@@ -404,7 +404,7 @@ my $mod = 'Async::Event::Interval';
     $s = $e->shared_scalar;
 
     $e->start;
-    while (! $e->waiting) {}
+    $e->wait;
 
     ok $e->error,                "crash mid-write: error flag set after callback died";
     is ref($$s),       'HASH',   "crash mid-write: shared_scalar still readable in parent";
