@@ -712,6 +712,7 @@ sub _end {
             my $msg = shift;
             return if $msg =~ /Couldn't remove (?:shm segment|semaphore set) \d+: Invalid argument/;
             return if $msg =~ /Use of uninitialized value \$sem_remove_status/;
+            return if $msg =~ /Use of uninitialized value \$id in hash element/;
             warn $msg;
         };
         IPC::Shareable::clean_up_protected(_shm_lock());
@@ -1059,20 +1060,25 @@ segment per node:
     my $host = $$s->{config}{db}{host};   # 'localhost'
 
 B<Updating a stored hashref>: When extending a hashref already in the scalar,
-either build a fresh hashref from the spread of the current value, or mutate
-through the dereference directly. Do not fetch the reference into a lexical,
-mutate it, and store it back: that pattern corrupts the segment because the
-fetched reference still carries C<IPC::Shareable>'s tied magic, and
-re-storing a tied value into its own parent breaks the serialization:
+mutate through the dereference directly. Do not fetch the reference into a
+lexical, mutate it, and store it back: that pattern corrupts the segment
+because the fetched reference still carries C<IPC::Shareable>'s tied magic,
+and re-storing a tied value into its own parent breaks the serialization:
 
-    # Reliable: assign a newly constructed hashref
-    $$s = { %{$$s}, new_key => 'val' };
-
-    # Also reliable: direct dereferenced mutation
+    # Recommended: direct dereferenced mutation
     $$s->{new_key} = 'val';
+
+    # Also works (modern stacks): spread + reassign
+    $$s = { %{$$s}, new_key => 'val' };
 
     # Unreliable: re-storing a fetched reference corrupts the segment
     # my $h = $$s; $h->{new_key} = 'val'; $$s = $h;
+
+The spread idiom replaces the entire stored value, which on older
+C<IPC::Shareable> versions can lose accumulated cross-process writes
+(later writers replacing earlier writers' data). The direct dereferenced
+mutation avoids the nested-segment STORE path and is the more portable
+choice.
 
 B<Lifetime>: The underlying shared memory segment is owned by the event object
 that created it. When the event goes out of scope (and its C<DESTROY> runs),
@@ -1148,7 +1154,7 @@ The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
 
 C<error> is C<1> if the event is currently stopped because its callback
 died (mirrors L</error>), C<0> otherwise. C<waiting> is C<1> if the event
-is dormant and ready for a L</start>/L</restart> call (mirrors L</waiting>),
+is dormant and ready for a L<start()|/start(@params)>/L</restart> call (mirrors L</waiting>),
 C<0> if it is currently running. See L</info> for the full lifecycle state
 table.
 
@@ -1566,17 +1572,18 @@ the callback finishes.
 
 =head3 Updating a stored hashref
 
-When extending a hashref already in the scalar, either build a fresh hashref
-with the spread of the current value, or mutate through the dereference
-directly:
+When extending a hashref already in the scalar, mutate through the
+dereference directly. The spread idiom also works on modern
+C<IPC::Shareable> stacks but is less portable across forked writers on
+older versions:
 
     $$s = { a => 1, b => 2 };
 
-    # Spread idiom
-    $$s = { %{$$s}, c => 3 };
+    # Recommended: direct dereferenced mutation
+    $$s->{c} = 3;
 
-    # Direct dereferenced mutation
-    $$s->{d} = 4;
+    # Also works (modern stacks): spread + reassign
+    $$s = { %{$$s}, d => 4 };
 
 B<Do not> fetch the reference into a lexical, mutate it, and store it back
 (C<< my $h = $$s; $h->{x} = 1; $$s = $h; >>) - that pattern corrupts the

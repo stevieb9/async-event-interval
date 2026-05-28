@@ -28,3 +28,4 @@ cover_db/
 _Inline/
 /*.md
 .DS_store
+ci-bak/

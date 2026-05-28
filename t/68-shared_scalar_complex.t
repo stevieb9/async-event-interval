@@ -15,7 +15,7 @@ use Async::Event::Interval;
 #  3  Event writes arrayref; parent reads elements and length
 #  4  Parent writes hashref; event reads it and reports results via 2nd scalar
 #  5  Two events share one scalar: A writes, B reads and augments
-#  6  Parent seeds hashref; two events each extend it; all three keys survive
+#  6  Parent seeds hashref; two events each extend it via direct mutation; all three keys survive
 #  7  3-level nested hashref round-trips through parent STORE/FETCH (no fork)
 #  8  Event writes 3-level nested hashref; parent dereferences all three levels
 #  9  Two events exchange 3-level structures: B reads A's leaf, embeds it in its own
@@ -129,18 +129,22 @@ my $mod = 'Async::Event::Interval';
     is $$s->{doubled},  200,    "event B doubled event A's value correctly";
 }
 
-# 6. Parent writes a seed hashref; two events each extend it by creating a
-#    fresh hashref that spreads the current value (the same idiom test 5
-#    uses). All three parties' keys coexist in the final snapshot.
+# 6. Parent writes a seed hashref; two events each extend it via direct
+#    dereferenced mutation (the alternative idiom to the spread used in
+#    test 5 - see shared_scalar POD). Direct mutation adds a single key to
+#    the existing tied hash rather than replacing the entire stored value,
+#    so it avoids the nested-segment STORE path that older IPC::Shareable
+#    versions don't always handle reliably across forks. All three parties'
+#    keys coexist in the final snapshot.
 {
     my $s;
     my $event_a = $mod->new(0, sub {
-        $$s = { %{$$s}, event_a => 'done' };
+        $$s->{event_a} = 'done';
     });
     $s = $event_a->shared_scalar;
 
     my $event_b = $mod->new(0, sub {
-        $$s = { %{$$s}, event_b => 'done' };
+        $$s->{event_b} = 'done';
     });
 
     $$s = { written_by => 'parent' };
