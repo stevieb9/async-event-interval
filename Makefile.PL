@@ -42,6 +42,8 @@ WriteMakefile(
     clean => { FILES => 'Async-Event-Interval-*' },
 );
 
+# Strip macOS extended attributes and AppleDouble metadata from dist
+# tarballs (LIBARCHIVE.xattr.* headers cause warnings on Linux tar).
 sub MY::postamble {
-    return '';
+    return $^O eq 'darwin' ? "TARFLAGS = --no-mac-metadata -cvf\n" : '';
 }

@@ -28,6 +28,42 @@ use Async::Event::Interval;
 # 16  Storing a code ref: not retrievable cross-process (POD warning)
 # 17  Mutate-then-store: pins the broken pattern documented in POD
 # 18  Event crash mid-write: shared_scalar remains readable and writable
+#
+# Capacity-aware execution: each event + shared_scalar pair holds 3-7 SysV
+# semaphore identifier sets (events hash entry, lock semaphore, scalar
+# segment, plus one per nested ref). The full 18-subtest battery peaks above
+# 50 sem sets cumulatively within a single perl process (block-exit DESTROY
+# releases only 1-2 sets per block). On platforms with tight kernel limits
+# (FreeBSD default semmni=50, OpenBSD default semmni=10), running the full
+# battery hits ENOSPC mid-run. We branch on available headroom:
+#
+#   * Full     (headroom >= 65 or unknown): all 18 subtests
+#   * Reduced  (headroom >= 45): skips the heaviest 5 subtests (4, 8, 9, 12, 13)
+#   * Skip-all (headroom < 45): plan skip_all with a remediation diag
+#
+# The thresholds come from on-platform measurements (see FBSD2.md). The
+# reduced subset still exercises basic shared_scalar semantics, event-driven
+# writes, two-event exchange, type mutation, interval mode, blessed/code ref
+# limitations, the mutate-then-store edge case, and crash-during-write
+# recovery — only the deep-nesting and two-event-with-deep-nesting cases drop.
+
+my $headroom    = TestHelper::available_sem_headroom();
+my $can_full    = !defined($headroom) || $headroom >= 65;
+my $can_reduced = !defined($headroom) || $headroom >= 45;
+
+unless ($can_reduced) {
+    TestHelper::note_skip_all();
+    plan skip_all =>
+        "Insufficient SysV semaphore headroom for this test "
+      . "(have " . (defined $headroom ? $headroom : 'unknown')
+      . ", need >= 45). Raise kern.ipc.semmni (FreeBSD) or "
+      . "/proc/sys/kernel/sem field 4 (Linux).";
+}
+
+if (!$can_full) {
+    diag "Low IPC headroom ($headroom < 65): running reduced subset "
+       . "(skipping subtests 4, 8, 9, 12, 13).";
+}
 
 my $mod = 'Async::Event::Interval';
 
@@ -83,7 +119,9 @@ my $mod = 'Async::Event::Interval';
 
 # 4. Parent writes a hashref before the event starts; event reads fields
 #    and reports results via a second shared_scalar on the same event.
-{
+#    SKIPPED in reduced mode: two shared_scalars on one event allocates
+#    extra child segments.
+if ($can_full) {
     my ($s_input, $s_result);
     my $e = $mod->new(0, sub {
         $$s_result = {
@@ -178,7 +216,9 @@ my $mod = 'Async::Event::Interval';
 
 # 8. Event writes a 3-level nested hashref; parent reads and dereferences
 #    all three levels after the event completes.
-{
+#    SKIPPED in reduced mode: 3-level event-side nesting is redundant with
+#    subtest 7's parent-side 3-level coverage.
+if ($can_full) {
     my $s;
     my $e = $mod->new(0, sub {
         $$s = {
@@ -206,7 +246,9 @@ my $mod = 'Async::Event::Interval';
 #    scalar: event A writes {a=>{b=>{c=>'from_A'}}}; event B reads
 #    that leaf, then replaces the scalar with its own 3-level struct
 #    that embeds the value it read.
-{
+#    SKIPPED in reduced mode: this is the heaviest single block (two
+#    events + 3-level structures = ~7 sem sets cumulative).
+if ($can_full) {
     my $s;
     my $event_a = $mod->new(0, sub {
         $$s = { a => { b => { c => 'from_A' } } };
@@ -274,7 +316,8 @@ my $mod = 'Async::Event::Interval';
 
 # 12. Mixed nesting: hashref containing an arrayref of hashrefs, with inner
 #     arrayrefs at the leaves. Confirms heterogeneous nesting round-trips.
-{
+#     SKIPPED in reduced mode: 5+ nested refs = 5+ child sem sets.
+if ($can_full) {
     my $e = $mod->new(0, sub {});
     my $s = $e->shared_scalar;
 
@@ -297,7 +340,8 @@ my $mod = 'Async::Event::Interval';
 # 13. 5-level nesting: each nested ref allocates its own child shm segment
 #     (see shared_scalar POD), so this also exercises deeper segment-per-node
 #     allocation and cleanup.
-{
+#     SKIPPED in reduced mode: 5-level = 5 child sem sets in one block.
+if ($can_full) {
     my $e = $mod->new(0, sub {});
     my $s = $e->shared_scalar;
 
