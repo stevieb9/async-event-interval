@@ -540,6 +540,20 @@ host. Future runs use the already-pre-baked cached qcow2.
 
 ## Archived backlog items
 
+### B3: DragonFly's OVMF VARS template
+
+Closed 2026-05-29 as a non-issue.
+
+The original macOS path was `edk2-i386-vars.fd`. Debian's `OVMF_VARS.fd`
+was hypothesised to pair with `OVMF_CODE.fd` cleanly for x86_64, but the
+combination hadn't been exercised against an actual DragonFly boot on
+Linux when this entry was filed.
+
+V6 (DragonFly first-boot on Linux/KVM, heritage 2026-05-29) confirmed
+that Debian's `/usr/share/OVMF/OVMF_CODE.fd` is loaded by the path
+resolver in `dragonfly-first-boot.py` without any intervention — no
+`OVMF_*_4M.fd` fallback needed, no bug to file. Closing as non-issue.
+
 ### B5: Stale hdiutil references in docs/comments
 
 Resolved 2026-05-29.
@@ -561,6 +575,39 @@ first-boot scripts and `solaris-test.sh`, but stale references remained:
 
 Cleanup made alongside B7's "Migration to a new Linux machine" README
 work since both touched `ci/README.md`.
+
+### B6: Cosmetic — `==> Tested:` line shows unsubstituted `${TEST_MODULE}::VERSION`
+
+Surfaced during V3 attempt 5 (heritage, 2026-05-28). Resolved
+2026-05-29.
+
+The first version probe in `dragonfly-test.sh`, `openbsd-test.sh`, and
+`solaris-test.sh` used `\${TEST_MODULE}::VERSION` inside an outer
+double-quoted string:
+
+```sh
+_VERSION=$(limactl shell ... "perl ... -e 'print qq(${TEST_MODULE} \${TEST_MODULE}::VERSION\n)'")
+```
+
+Inside double quotes, `\${...}` is fully escaped — the outer shell
+passes `${TEST_MODULE}::VERSION` through as literal text to perl. Perl
+then sees `qq(IPC::Shareable ${TEST_MODULE}::VERSION\n)` and
+interpolates `$TEST_MODULE` (a Perl variable, undefined here) as empty,
+producing the famous `==> Tested: IPC::Shareable ::VERSION` artifact in
+the test wrapper output.
+
+`freebsd-test.sh` already had the correct pattern `\$${TEST_MODULE}`
+(`\$` → literal `$`, then `${TEST_MODULE}` expanded by the outer shell
+to `IPC::Shareable`, yielding the Perl variable `$IPC::Shareable::VERSION`).
+`linux-i386-test.sh` used a different nested-escape pattern that also
+worked correctly. So the bug only existed in 3 of the 5 scripts.
+
+**Fix**: change `\${TEST_MODULE}::VERSION` to `\$${TEST_MODULE}::VERSION`
+in dragonfly/openbsd/solaris-test.sh. Verified by re-running the
+openbsd warm-VM suite — the output now correctly reads
+`==> Tested: IPC::Shareable 1.17`.
+
+Test PASS/FAIL was never affected — purely a cosmetic log-line fix.
 
 ### B8: OmniOS first-boot ZFS pool scan blocks V4/V5 (Linux KVM)
 

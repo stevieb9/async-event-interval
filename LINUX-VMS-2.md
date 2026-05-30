@@ -6,13 +6,13 @@
 > custom QEMU/KVM backend the original plan proposed is not required.
 
 ARCHIVE: See [LINUX-VM-2-ARCHIVE.md](LINUX-VM-2-ARCHIVE.md) for completed
-V1-V12, Fixes 1-13, B5 and B8, the Phase 0/1/2/3 history, and the
-Boot-time predictions vs actuals table.
+V1-V12, Fixes 1-13, B3 / B5 / B6 / B8, the Phase 0/1/2/3 history, and
+the Boot-time predictions vs actuals table.
 
 NEXT ACTION: B7's doc half is done (Migration section in `ci/README.md`).
 The remaining half is the validation pass: a fresh-host run (or a
 controlled wipe on heritage) to confirm the README's steps are
-sufficient. B1-B4, B6, B9 remain in the backlog but are all non-blocking.
+sufficient. B1, B2, B4, B9 remain in the backlog but are all non-blocking.
 
 ## How to maintain this doc (until we have a separate instructions file)
 
@@ -99,33 +99,10 @@ Upstream Lima bug (1-space list indentation that FreeBSD's parser rejects).
 Worth filing against Lima if not already known. Until fixed, the
 `freebsd-first-boot.py` workaround stays.
 
-### B3: DragonFly's OVMF VARS template
-
-The original macOS path was `edk2-i386-vars.fd`. Debian's `OVMF_VARS.fd`
-should pair with `OVMF_CODE.fd` cleanly for x86_64, but this hasn't been
-exercised against an actual DragonFly boot on Linux yet. If V6 fails on
-firmware initialisation, try the `OVMF_*_4M.fd` variants or file a bug.
-
 ### B4: Image cache shared between hosts
 
 Current scripts use `~/.lima/_cache/`. If we want a server-shared cache
 (e.g. `/var/cache/ci-vms/`), make it configurable. Not blocking.
-
-### B6: Cosmetic — `==> Tested:` line shows unsubstituted `${TEST_MODULE}::VERSION`
-
-Surfaced during V3 attempt 5. First version probe in all 5 `*-test.sh`:
-
-```sh
-_VERSION=$(limactl shell ... "perl -I'${GUEST_REPO}/lib' -M${TEST_MODULE} \
-    -e 'print qq(${TEST_MODULE} \${TEST_MODULE}::VERSION\n)'" 2>/dev/null)
-```
-
-Result in V3 log: `==> Tested: IPC::Shareable ::VERSION` (the second
-`${TEST_MODULE}` doesn't substitute because it's inside the perl single
-quotes; only `\${TEST_MODULE}::VERSION` was meant to be the perl
-expression, but `${TEST_MODULE}` should expand to `IPC::Shareable` first,
-making it `$IPC::Shareable::VERSION`). The intent is fine — only the perl
-expression rendering broke. Cosmetic only; test PASS/FAIL is unaffected.
 
 ### B7: Fresh-Linux-host dry run + "Migration to a new Linux machine" doc
 
