@@ -540,6 +540,28 @@ host. Future runs use the already-pre-baked cached qcow2.
 
 ## Archived backlog items
 
+### B5: Stale hdiutil references in docs/comments
+
+Resolved 2026-05-29.
+
+Functional code stopped using `hdiutil` after Fix 2 swept it out of the
+first-boot scripts and `solaris-test.sh`, but stale references remained:
+
+- `ci/README.md`: code examples showing the old hdiutil-based manual
+  instance-id extraction (`hdiutil attach ... grep instance-id ...
+  hdiutil detach`). Replaced with the portable `grep -aoE 'instance-id:
+  [a-zA-Z0-9_-]+'` one-liner — works on macOS and Linux without
+  mounting.
+- `ci/dragonfly-first-boot.py:102`: docstring comment explaining *why*
+  the script avoids hdiutil. The "fragile hdiutil mount/detach which
+  can fail on stale mounts or macOS restrictions" framing was a
+  contrast against the original approach; tightened to a
+  forward-looking description ("Works without mounting (no macOS
+  hdiutil, no Linux loop device)").
+
+Cleanup made alongside B7's "Migration to a new Linux machine" README
+work since both touched `ci/README.md`.
+
 ### B8: OmniOS first-boot ZFS pool scan blocks V4/V5 (Linux KVM)
 
 Discovered during V4 attempt 1 (heritage, 2026-05-28). Resolved

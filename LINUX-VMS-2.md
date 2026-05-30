@@ -6,12 +6,13 @@
 > custom QEMU/KVM backend the original plan proposed is not required.
 
 ARCHIVE: See [LINUX-VM-2-ARCHIVE.md](LINUX-VM-2-ARCHIVE.md) for completed
-V1-V12, Fixes 1-13, B8, the Phase 0/1/2/3 history, and the Boot-time
-predictions vs actuals table.
+V1-V12, Fixes 1-13, B5 and B8, the Phase 0/1/2/3 history, and the
+Boot-time predictions vs actuals table.
 
-NEXT ACTION: All phases done. Remaining work is the Backlog (B1-B7, B9).
-B7 (fresh-Linux-host dry run + Migration doc) is the natural next target;
-the others are non-blocking.
+NEXT ACTION: B7's doc half is done (Migration section in `ci/README.md`).
+The remaining half is the validation pass: a fresh-host run (or a
+controlled wipe on heritage) to confirm the README's steps are
+sufficient. B1-B4, B6, B9 remain in the backlog but are all non-blocking.
 
 ## How to maintain this doc (until we have a separate instructions file)
 
@@ -110,21 +111,6 @@ firmware initialisation, try the `OVMF_*_4M.fd` variants or file a bug.
 Current scripts use `~/.lima/_cache/`. If we want a server-shared cache
 (e.g. `/var/cache/ci-vms/`), make it configurable. Not blocking.
 
-### B5: Stale hdiutil references in docs/comments
-
-Functional code no longer uses `hdiutil` (Fix 2 swept it out of the
-first-boot scripts and `solaris-test.sh`), but a few documentation/comment
-references remain:
-
-- `ci/README.md` lines 779, 781, 869, 871, 882: code examples showing the
-  old hdiutil-based manual instance-id extraction. Replace with the
-  `grep -aoE 'instance-id: [a-zA-Z0-9_-]+'` one-liner.
-- `ci/dragonfly-first-boot.py:102`: docstring comment explaining *why* the
-  script avoids hdiutil. Benign but reads oddly now that no script uses
-  hdiutil at all — can be tightened.
-
-Not blocking; just stale documentation.
-
 ### B6: Cosmetic — `==> Tested:` line shows unsubstituted `${TEST_MODULE}::VERSION`
 
 Surfaced during V3 attempt 5. First version probe in all 5 `*-test.sh`:
@@ -143,94 +129,19 @@ expression rendering broke. Cosmetic only; test PASS/FAIL is unaffected.
 
 ### B7: Fresh-Linux-host dry run + "Migration to a new Linux machine" doc
 
-After V4–V9 are green, do one clean-slate validation on a fresh Linux box
-(or simulate by blowing away `~/.lima/*`, `~/.cache/lima/`, the cached
-images under `~/.lima/_cache/`, and re-running the full V suite from
-scratch). The goal is to surface any host dep / config step we've taken
-for granted on heritage that wouldn't be present elsewhere.
+**Doc half: ✅ DONE** (2026-05-29). The "Migration to a new Linux
+machine" subsection now lives in `ipc-shareable/ci/README.md` directly
+after **Host setup**. It covers sibling repo layout, DragonFly base
+image sourcing, the OmniOS qcow2 pre-bake (with the do-NOT-edit
+caveat), and optional libguestfs accessibility.
 
-Inputs to budget for:
-
-- `qemu-system-x86`, `qemu-utils`, `xorriso`, `ovmf` from apt
-- `kvm` group membership (logout/login required)
-- Lima install per `ci/README.md`
-- `python3` (standard on Ubuntu, but should be asserted)
-- Both `ipc-shareable` and `async-event-interval` cloned as siblings
-- DragonFly: user must source `~/.lima/_cache/dragonfly64.qcow2` (no public
-  cloud image exists for DragonFly)
-
-If the dry run uncovers a step that isn't already captured, add a
-**"Migration to a new Linux machine"** section near the top of
-`ci/README.md` (after the existing "Host setup" subsection) with the
-exact commands. Cross-reference from B5 since the README cleanup is
-adjacent work.
-
-Done when: a previously untouched Linux x86_64 host can run
-`./ci/vm-tests.sh -p ipc-shareable` (all targets) end-to-end with only
-the steps documented in `ci/README.md`.
-
-#### Running migration notes (feed into README during B7)
-
-Captured as we go. Move into `ci/README.md` "Migration to a new Linux
-machine" section when B7 lands.
-
-- **Host packages**: `qemu-system-x86 qemu-utils xorriso ovmf` via apt
-  (Fix 1 + Phase 0).
-- **Group membership**: `sudo usermod -aG kvm "$USER"` then logout/login
-  so `/dev/kvm` is readable by the user that runs the scripts.
-- **Lima version pin**: validated against Lima 2.1.1 on Ubuntu 22.04
-  x86_64. Newer versions may need re-validation if cidata or hostagent
-  behaviour shifts.
-- **Sibling repo layout**: `ipc-shareable` and `async-event-interval`
-  must live as siblings under a shared parent directory. `*-test.sh`
-  computes `HOST_REPO` via `${SCRIPT_DIR}/../..` and would fail noisily
-  otherwise.
-- **DragonFly qcow2 is host-provided**: no public cloud image exists.
-  Copy `~/.lima/_cache/dragonfly64.qcow2` from an existing host that
-  already has it (or build via the procedure in the README — TBD if
-  one exists). `scp` ~778 MB.
-- **Lima cidata.iso gap for OpenBSD config**: Lima 2.1.1 on Linux
-  silently does not generate `cidata.iso` for `openbsd-lima.yaml`. Same
-  Lima version does generate it on macOS for the same yaml. Worked
-  around in `openbsd-test.sh` (Fix 7) by self-generating a minimal
-  NoCloud ISO. No user-visible step required; just noting that the
-  workaround is in place.
-- **DragonFly OVMF on Debian/Ubuntu**: Debian's `/usr/share/OVMF/OVMF_CODE.fd`
-  works for DragonFly out of the box. B3 (concern about VARS template
-  compatibility) was a non-issue in V6 — the path resolver in
-  `dragonfly-first-boot.py` finds it automatically. No user-visible step.
-- **OpenBSD has no `unzip`, and doesn't need one**: the aei project on
-  OpenBSD installs IPC::Shareable from a GitHub `.tar.gz` (extracted with
-  the base-system `tar`) rather than the previous `.zip`+`unzip` flow.
-  No package install required (Fix 10). User-visible only if you maintain
-  the script — don't reintroduce a `unzip` dependency on the guest.
-- **OmniOS qcow2 needs a one-time host-side pre-bake (Fix 13)**: a fresh
-  download of `omnios-r151058.cloud.vmdk` boots so slowly on Linux KVM
-  that it never finishes first-boot before the script gives up. Run this
-  once on the host, after `solaris-test.sh` has downloaded and converted
-  the image to `~/.lima/_cache/omnios-r151058.qcow2`:
-
-  ```sh
-  cp ~/.lima/_cache/omnios-r151058.qcow2 ~/.lima/_cache/omnios-r151058.qcow2.bak
-  sudo modprobe nbd max_part=16
-  sudo qemu-nbd --connect=/dev/nbd0 ~/.lima/_cache/omnios-r151058.qcow2
-  sudo mkdir -p /mnt/omnios
-  sudo zpool import -f -R /mnt/omnios rpool
-  sudo zpool export rpool
-  sudo qemu-nbd --disconnect /dev/nbd0
-  sudo rmdir /mnt/omnios
-  ```
-
-  Required apt packages: `qemu-utils zfsutils-linux`. **Do not edit
-  any files inside the pool** — see Fix 13 for why (boot archive
-  checksum mismatch triggers an OmniOS auto-reboot that won't recover).
-- **libguestfs needs readable kernel images on Debian/Ubuntu**: out of
-  the box, `/boot/vmlinuz-*` is `-rw-------` (root-only). `sudo chmod
-  644 /boot/vmlinuz-*` lets the regular user run `guestfish`,
-  `virt-edit`, etc. Not strictly required for the OmniOS pre-bake
-  (that uses `qemu-nbd`, not libguestfs), but useful for any future
-  guest filesystem inspection. May need re-applying after kernel
-  package upgrades.
+**Validation half: still to do.** A clean-slate run on a previously
+untouched Linux x86_64 host (or a controlled wipe of `~/.lima/*`,
+`~/.cache/lima/`, and the `_cache/` images on heritage). The goal is
+to surface any step that's silently present on heritage but isn't
+captured in the README. **Done when**: a fresh host can run
+`./ci/vm-tests.sh -p ipc-shareable` (all targets including solaris)
+end-to-end with only the steps documented in `ci/README.md`.
 
 ### B9: Image migration from macOS (optional speedup)
 
