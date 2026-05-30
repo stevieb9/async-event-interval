@@ -6,13 +6,13 @@
 > custom QEMU/KVM backend the original plan proposed is not required.
 
 ARCHIVE: See [LINUX-VM-2-ARCHIVE.md](LINUX-VM-2-ARCHIVE.md) for completed
-V1-V12, Fixes 1-13, B3 / B5 / B6 / B8, the Phase 0/1/2/3 history, and
-the Boot-time predictions vs actuals table.
+V1-V12, Fixes 1-13, B3 / B5 / B6 / B7 / B8, the Phase 0/1/2/3 history,
+and the Boot-time predictions vs actuals table.
 
-NEXT ACTION: B7's doc half is done (Migration section in `ci/README.md`).
-The remaining half is the validation pass: a fresh-host run (or a
-controlled wipe on heritage) to confirm the README's steps are
-sufficient. B1, B2, B4, B9 remain in the backlog but are all non-blocking.
+NEXT ACTION: Phase 3 + B7 done. B1, B2, B4, B9 remain in the backlog
+but are all non-blocking. Possible next steps: file Lima YAML bug
+upstream (B2), or leave the rest as-is — the project is functionally
+complete on Linux.
 
 ## How to maintain this doc (until we have a separate instructions file)
 
@@ -103,22 +103,6 @@ Worth filing against Lima if not already known. Until fixed, the
 
 Current scripts use `~/.lima/_cache/`. If we want a server-shared cache
 (e.g. `/var/cache/ci-vms/`), make it configurable. Not blocking.
-
-### B7: Fresh-Linux-host dry run + "Migration to a new Linux machine" doc
-
-**Doc half: ✅ DONE** (2026-05-29). The "Migration to a new Linux
-machine" subsection now lives in `ipc-shareable/ci/README.md` directly
-after **Host setup**. It covers sibling repo layout, DragonFly base
-image sourcing, the OmniOS qcow2 pre-bake (with the do-NOT-edit
-caveat), and optional libguestfs accessibility.
-
-**Validation half: still to do.** A clean-slate run on a previously
-untouched Linux x86_64 host (or a controlled wipe of `~/.lima/*`,
-`~/.cache/lima/`, and the `_cache/` images on heritage). The goal is
-to surface any step that's silently present on heritage but isn't
-captured in the README. **Done when**: a fresh host can run
-`./ci/vm-tests.sh -p ipc-shareable` (all targets including solaris)
-end-to-end with only the steps documented in `ci/README.md`.
 
 ### B9: Image migration from macOS (optional speedup)
 

@@ -609,6 +609,57 @@ openbsd warm-VM suite — the output now correctly reads
 
 Test PASS/FAIL was never affected — purely a cosmetic log-line fix.
 
+### B7: Fresh-Linux-host dry run + "Migration to a new Linux machine" doc
+
+Resolved 2026-05-29 in two halves.
+
+**Doc half** — added a `### Migration to a new Linux machine`
+subsection to `ipc-shareable/ci/README.md` directly after `### Host
+setup`. It covers the four things a fresh Linux host needs beyond the
+generic Lima install:
+
+- **Sibling repo layout** — `ipc-shareable` and `async-event-interval`
+  must live as siblings; `*-test.sh` computes `HOST_REPO` via
+  `${SCRIPT_DIR}/../..`.
+- **DragonFly base image** — no public cloud image; operator must scp
+  `~/.lima/_cache/dragonfly64.qcow2` from a host that has it.
+- **OmniOS qcow2 pre-bake** — the one-time `qemu-nbd` + `zpool
+  import -f` + `zpool export` procedure that resolves B8 on a per-host
+  basis. Includes the **do NOT edit files in the pool** warning that
+  V4 attempt 2 surfaced.
+- **Optional libguestfs accessibility** — `sudo chmod 644
+  /boot/vmlinuz-*` for users who want `guestfish` / `virt-edit` for
+  diagnostics. Not required for the OmniOS pre-bake.
+
+**Validation half** — heritage was wiped to a Lima-free state
+(`limactl delete` all VMs, `rm -rf ~/.lima ~/.cache/lima`, `sudo rm`
+the Lima binary). Only the operator-supplied DragonFly qcow2 was
+backed up outside Lima dirs; apt-installed host packages and the
+existing `chmod 644 /boot/vmlinuz-*` were left as-is (per the
+README's Host setup, those wouldn't be re-run by an operator who'd
+already done a clean apt install).
+
+Then reconstructed from the README only:
+
+1. `curl ... | sudo tar -C /usr/local -xzf -` for Lima v2.1.1.
+2. Verified sibling layout.
+3. `cp ~/dragonfly64-backup.qcow2 ~/.lima/_cache/dragonfly64.qcow2`.
+4. Ran `solaris-test.sh` with `timeout 600` (per the README's
+   "let it download+convert, then Ctrl-C" pattern), then `limactl
+   delete --force solaris-ipc`.
+5. Did the 7-command OmniOS pre-bake block verbatim.
+6. `./ci/vm-tests.sh -p ipc-shareable -k`.
+
+End-to-end: 37 min 43 sec from cold-wiped state. All 5 VMs PASS:
+freebsd, linux-i386, openbsd, solaris, dragonfly. Zero off-README
+steps required.
+
+The README is therefore sufficient for a fresh Linux x86_64 host.
+Pattern takeaway: validating docs by mechanically following them
+catches the silent-assumption bugs (e.g. "the chmod is already
+applied, I forgot to mention it") that even careful authoring
+misses.
+
 ### B8: OmniOS first-boot ZFS pool scan blocks V4/V5 (Linux KVM)
 
 Discovered during V4 attempt 1 (heritage, 2026-05-28). Resolved
