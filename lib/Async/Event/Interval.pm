@@ -118,6 +118,18 @@ sub id {
     $self->{id} = $id if defined $id;
     return $_[0]->{id};
 }
+sub immediate {
+    my ($self, $value) = @_;
+
+    if (@_ > 1) {
+        if (defined $value && $value !~ /^\d+$/) {
+            croak "\$value must be a non-negative integer or undef";
+        }
+        _events_write(sub { $events{$self->id}{immediate} = $value });
+    }
+
+    return _events_read(sub { $events{$self->id}{immediate} });
+}
 sub info {
     my ($self) = @_;
     return _events_read(sub {
@@ -138,18 +150,6 @@ sub info {
             if $copy{shared_scalars};
         return \%copy;
     });
-}
-sub immediate {
-    my ($self, $value) = @_;
-
-    if (@_ > 1) {
-        if (defined $value && $value !~ /^\d+$/) {
-            croak "\$value must be a non-negative integer or undef";
-        }
-        _events_write(sub { $events{$self->id}{immediate} = $value });
-    }
-
-    return _events_read(sub { $events{$self->id}{immediate} });
 }
 sub interval {
     my ($self, $interval) = @_;
@@ -376,19 +376,19 @@ sub _detect_crash {
         }
     }
 }
-sub _errors {
-    my ($self, $increment) = @_;
-    if (defined $increment) {
-        _events_write(sub { $events{$self->id}->{errors}++ });
-    }
-    return _events_read(sub { $events{$self->id}->{errors} });
-}
 sub _error_message {
     my ($self, $msg) = @_;
     if (defined $msg) {
         _events_write(sub { $events{$self->id}->{error_message} = $msg });
     }
     return _events_read(sub { $events{$self->id}->{error_message} });
+}
+sub _errors {
+    my ($self, $increment) = @_;
+    if (defined $increment) {
+        _events_write(sub { $events{$self->id}->{errors}++ });
+    }
+    return _events_read(sub { $events{$self->id}->{errors} });
 }
 sub _event {
     my ($self, @event_params) = @_;
@@ -611,13 +611,13 @@ sub _started {
 # External access: These allow unit tests to directly access live data in the
 # %events hash
 
-sub _events_knot {
-    # The IPC::Shareable knot itself
-    return tied(%events);
-}
 sub _events_count {
     # Number of events currently alive
     return _events_read(sub { $events{_event_count} || 0 });
+}
+sub _events_knot {
+    # The IPC::Shareable knot itself
+    return tied(%events);
 }
 sub _events_next_id {
     return _events_read(sub { $events{_id_counter} || 0 });
