@@ -116,7 +116,7 @@ sub events {
 sub id {
     my ($self, $id) = @_;
     $self->{id} = $id if defined $id;
-    return $_[0]->{id};
+    return $self->{id};
 }
 sub immediate {
     my ($self, $value) = @_;
@@ -764,7 +764,7 @@ END {
     _end(1);
 }
 
-sub _vim{}
+sub _vim{} # vim navigation marker; intentionally empty
 
 1;
 

@@ -41,7 +41,9 @@ use Async::Event::Interval;
 #   * Reduced  (headroom >= 45): skips the heaviest 5 subtests (4, 8, 9, 12, 13)
 #   * Skip-all (headroom < 45): plan skip_all with a remediation diag
 #
-# The thresholds come from on-platform measurements (see FBSD2.md). The
+# Each shared_scalar event consumes ~15-20 SysV semaphores; the 65/45
+# thresholds were derived empirically on FreeBSD to stay under
+# kern.ipc.semmni while leaving headroom for other IPC consumers. The
 # reduced subset still exercises basic shared_scalar semantics, event-driven
 # writes, two-event exchange, type mutation, interval mode, blessed/code ref
 # limitations, the mutate-then-store edge case, and crash-during-write
