@@ -754,7 +754,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
         "write to events() snapshot does NOT call _write_events";
     is $read_count, 0,
         "write to events() snapshot does NOT call _read_events";
-    ok !exists $e->info->{made_up_key},
+    ok ! exists $e->info->{made_up_key},
         "write to events() snapshot is NOT visible in live %events";
 }
 
@@ -1061,7 +1061,7 @@ sub events_knot { Async::Event::Interval::_events_knot() }
     my $term_idx = 0;
     my $kill_idx = 0;
     for my $i (0 .. $#kill_calls) {
-        $term_idx = $i if $kill_calls[$i][0] eq 'TERM' && !$term_idx;
+        $term_idx = $i if $kill_calls[$i][0] eq 'TERM' && ! $term_idx;
         $kill_idx = $i if $kill_calls[$i][0] eq 'KILL';
     }
     cmp_ok $term_idx, '<', $kill_idx,

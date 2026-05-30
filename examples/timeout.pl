@@ -20,11 +20,11 @@ my $event = Async::Event::Interval->new(
 $event->start;
 say "status ok" if $event->status;
 
-for (1..5){
+for (1..5) {
 
     sleep 1;
 
-    if ($event->error){
+    if ($event->error) {
         say "event crashed, restarting";
         $event->restart;
         say "status ok after restart" if $event->status;

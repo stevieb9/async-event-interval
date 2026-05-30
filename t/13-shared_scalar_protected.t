@@ -108,7 +108,7 @@ sub knot_of {
 
     my $register = IPC::Shareable::global_register();
     ok
-        !exists $register->{$seg_id},
+        ! exists $register->{$seg_id},
         "shared_scalar segment is gone from global_register after event DESTROY";
 }
 

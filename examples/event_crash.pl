@@ -15,7 +15,7 @@ $event->start;
 
 sleep 1;
 
-if ($event->error){
+if ($event->error) {
     say "event crashed, restarting";
     $event->restart;
     say "status ok after restart" if $event->status;

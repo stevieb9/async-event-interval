@@ -208,7 +208,7 @@ sub shared_scalar {
 }
 sub start {
     my ($self, @callback_params) = @_;
-    if ($self->_started){
+    if ($self->_started) {
         warn "Event already running...\n";
         return;
     }
@@ -402,12 +402,12 @@ sub _event {
         warn $warn if $warn !~ /^child process/;
     };
 
-    for (0..1){
+    for (0..1) {
         my $pid = $self->_pm->start;
         if (! defined $pid) {
             croak "fork() failed: $!";
         }
-        if ($pid){
+        if ($pid) {
             # This is the parent process
             $self->_pid($pid);
             push @all_pids, $pid;
@@ -476,7 +476,7 @@ sub _events_read {
     my $ok = eval { $r = $cb->(); 1 };
     my $err = $@;
     $knot->unlock;
-    die $err if !$ok;
+    die $err if ! $ok;
     return $r;
 }
 sub _events_write {
@@ -1472,7 +1472,7 @@ the program so you can figure out what's wrong with your callback code.
 
     sleep 1; # Do stuff
 
-    if ($event->error){
+    if ($event->error) {
         print "Event crashed, restarting\n";
         $event->restart;
     }

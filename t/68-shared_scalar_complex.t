@@ -48,8 +48,8 @@ use Async::Event::Interval;
 # recovery — only the deep-nesting and two-event-with-deep-nesting cases drop.
 
 my $headroom    = TestHelper::available_sem_headroom();
-my $can_full    = !defined($headroom) || $headroom >= 65;
-my $can_reduced = !defined($headroom) || $headroom >= 45;
+my $can_full    = ! defined($headroom) || $headroom >= 65;
+my $can_reduced = ! defined($headroom) || $headroom >= 45;
 
 unless ($can_reduced) {
     TestHelper::note_skip_all();
@@ -60,7 +60,7 @@ unless ($can_reduced) {
       . "/proc/sys/kernel/sem field 4 (Linux).";
 }
 
-if (!$can_full) {
+if (! $can_full) {
     diag "Low IPC headroom ($headroom < 65): running reduced subset "
        . "(skipping subtests 4, 8, 9, 12, 13).";
 }
@@ -73,7 +73,7 @@ my $mod = 'Async::Event::Interval';
     my $e = $mod->new(0, sub {});
     my $s = $e->shared_scalar;
 
-    ok !defined($$s), "initial dereferenced value is undef";
+    ok ! defined($$s), "initial dereferenced value is undef";
 
     $$s = { language => 'Perl', version => 5 };
 
@@ -279,11 +279,11 @@ if ($can_full) {
     my $e = $mod->new(0, sub {});
     my $s = $e->shared_scalar;
 
-    ok !defined($$s),  "type mutation: initial value is undef";
+    ok ! defined($$s),  "type mutation: initial value is undef";
 
     $$s = 'plain string';
     is $$s,    'plain string', "type mutation: string assignment round-trips correctly";
-    ok !ref($$s),              "type mutation: string has no ref";
+    ok ! ref($$s),              "type mutation: string has no ref";
 
     $$s = [10, 20, 30];
     is ref($$s), 'ARRAY', "type mutation: arrayref assignment";
@@ -295,7 +295,7 @@ if ($can_full) {
 
     $$s = 99;
     is $$s,    99,  "type mutation: back to plain number";
-    ok !ref($$s),   "type mutation: no longer a reference";
+    ok ! ref($$s),   "type mutation: no longer a reference";
 }
 
 # 11. Direct dereferenced mutation $$s->{key} = $val is the only other safe
