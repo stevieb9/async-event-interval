@@ -26,6 +26,6 @@ BB-Fail/
 cover_db/
 .aider*
 _Inline/
-/*.md
+#/*.md
 .DS_store
 ci-bak/
