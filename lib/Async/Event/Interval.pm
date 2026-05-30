@@ -835,6 +835,11 @@ default handler so the process exits with the correct status. If you install
 your own handlers for these signals, call C<Async::Event::Interval::_end(1)>
 from them before exiting to avoid leaking segments.
 
+The module also sets C<$SIG{CHLD} = 'IGNORE'> at load time to automatically
+reap forked event children, preventing zombie processes. If you need to
+manage child processes manually (e.g. to call C<waitpid> yourself), install
+your own C<$SIG{CHLD}> handler after C<use Async::Event::Interval>.
+
 =head1 METHODS - EVENT OPERATION
 
 =head2 new($delay, $callback, @params)
@@ -1127,6 +1132,10 @@ each shared scalar created by the event; use the scalar reference returned by
 L</shared_scalar> to read or write values.
 
 The snapshot is taken under a read lock (C<LOCK_SH>) for consistency.
+
+This method can be called as a class method
+(C<Async::Event::Interval-E<gt>events>) since it returns data for all
+events regardless of caller context.
 
     $VAR1 = {
         '0' => {
