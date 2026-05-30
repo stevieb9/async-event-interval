@@ -5,29 +5,40 @@
 > Lima-on-Linux path with KVM acceleration works essentially unchanged. The
 > custom QEMU/KVM backend the original plan proposed is not required.
 
-ARCHIVE: See [LINUX-VM-2-ARCHIVE.md](LINUX-VM-2-ARCHIVE.md) for completed V1-V12, Fixes 1-13, and B8.
+ARCHIVE: See [LINUX-VM-2-ARCHIVE.md](LINUX-VM-2-ARCHIVE.md) for completed
+V1-V12, Fixes 1-13, B8, the Phase 0/1/2/3 history, and the Boot-time
+predictions vs actuals table.
 
-NEXT ACTION: Phase 3 is ✅ done. Remaining work in this doc is the Backlog
-section — B7 (fresh-Linux-host dry run + Migration doc) is the natural next
-target; everything else is non-blocking.
+NEXT ACTION: All phases done. Remaining work is the Backlog (B1-B7, B9).
+B7 (fresh-Linux-host dry run + Migration doc) is the natural next target;
+the others are non-blocking.
 
 ## How to maintain this doc (until we have a separate instructions file)
 
-- **As each V item or Fix completes**, move its entry (V-table row or full
-  Fix section) verbatim into `LINUX-VM-2-ARCHIVE.md`, preserving the ✅
-  marker, date stamps, attempt notes, and stable ID.
-  longer in this document. Same with B sections
-- Then **update the ARCHIVE: line above** to list the IDs now present in
-  the archive. The line is the single source of truth for "what's been
-  archived"; readers shouldn't have to open the archive to know.
-- **Stable IDs persist**: never renumber on archive. V3 stays V3 forever.
-  New items still go at the end with the next free ID, never reused.
+This doc is for **what's left to do**. Completed work moves to
+`LINUX-VM-2-ARCHIVE.md`. A future AI session can pick up cold from this
+doc + the ARCHIVE: pointer line, without reading the full archive.
+
+- **As each V item, Fix, or B item completes**, move its entry verbatim
+  into `LINUX-VM-2-ARCHIVE.md` and **delete it entirely from this doc**
+  — no stubs, no "see archive" placeholder rows. The ARCHIVE: line
+  below is the single source of truth for "what's been archived".
+- **Completed multi-step plan sections** (Phase headers marked ✅ DONE,
+  one-off validation tables, finished prediction tables) also move to
+  the archive once they're settled. Keep this doc focused on
+  forward-looking material: Goal, Architecture, "NOT doing" guardrails,
+  active Backlog, and migration notes.
+- **Then update the ARCHIVE: line above** to list the IDs / sections
+  now in the archive. Readers shouldn't have to open the archive to
+  know whether something is there.
+- **Stable IDs persist**: never renumber on archive. V3 stays V3
+  forever. New items still go at the end with the next free ID, never
+  reused. (B8 is in the archive; the next backlog item is B9.)
 - **Backlog items (B*)** stay in this doc until they're resolved or
-  consciously dropped — only then archive (or delete).
-- No fixes remain in this doc; all are in the archive. New fixes
-  surfaced by future backlog work (e.g. B7) should be added back as
-  numbered sections under a fresh "Required fixes" heading and moved
-  out when complete.
+  consciously dropped.
+- **Fixes**: when none remain in this doc (the current state), don't
+  keep an empty "Required fixes" heading. Future fixes get a fresh
+  heading added back, then move out when complete.
 
 ## Goal
 
@@ -37,26 +48,6 @@ Linux x86_64, the existing TCG-emulated VMs (OpenBSD, Solaris, DragonFly,
 linux-i386 host) move to native KVM. FreeBSD switches from aarch64 (macOS
 HVF) to x86_64 (Linux KVM) — fast on both. Dual support is via auto-detection
 at script-startup, not a custom backend abstraction.
-
-## What Phase 0 validated
-
-Run on a real Ubuntu 22.04 x86_64 box with Lima 2.1.1:
-
-| Check | Result |
-|---|---|
-| Lima installable from upstream tarball | ✅ |
-| `/dev/kvm` accessible (user in `kvm` group) | ✅ |
-| `-machine q35,accel=kvm` appears in qemu cmdline | ✅ KVM confirmed |
-| Guest reports `Hypervisor: KVMKVMKVM` (FreeBSD `sysctl hw.hv_vendor`) | ✅ |
-| FreeBSD 14.3 x86_64 cold start (download + create + first boot) | ~1m49s |
-| FreeBSD 14.3 x86_64 warm start | **17s** |
-| `limactl shell freebsd-test -- uname -a` works post-first-boot | ✅ |
-| FreeBSD flua YAML cloud-init bug | ⚠️ Present on Linux too |
-| Lima 2.1.1 `--norock` issue with Debian `genisoimage` | ⚠️ Needs `xorriso` |
-
-The 17s warm boot is comparable to FreeBSD aarch64 on macOS HVF — both
-native virt. The big wins are still ahead on OpenBSD/DragonFly/Solaris
-(currently 30-60s under TCG on macOS, expected ~10-15s under Linux KVM).
 
 ## Architecture
 
@@ -75,81 +66,6 @@ The only platform-specific code paths are:
 
 Fix those and the scripts run on both platforms.
 
-## Implementation order
-
-Phase 0 is complete (Lima-on-Linux validated). What remains:
-
-**Tracking convention.** Phase 3 (validation) and Backlog items use stable
-prefixed IDs (`V1, V2, ...`; `B1, B2, ...`). Don't renumber on delete or
-reorder; items can be referenced across sessions ("V5 done", "fix B2"). New
-items go at the end with the next free ID, even if logically they belong
-in the middle.
-
-### Phase 1: portability fixes — minimum viable Linux support ✅ DONE
-
-Smallest set of changes to make the FreeBSD CI work on a Linux box without
-manual intervention:
-
-1. ✅ Edit `freebsd-lima.yaml` per Fix 5 (multi-arch images).
-2. ✅ Apply Fix 2 (`hdiutil` → `grep`) to `freebsd-first-boot.py`.
-3. ✅ Add Fix 1 setup note to `ci/README.md`.
-4. ✅ Add `xorriso` probe to `vm-tests.sh` (Linux-only; exits early with the
-   install command if `xorrisofs` is missing).
-
-After Phase 1: a Linux box can run `freebsd-test.sh` end-to-end. Verified on
-heritage.hellbent.app (Ubuntu 22.04, Lima 2.1.1).
-
-### Phase 2: port the other first-boot scripts ✅ DONE
-
-5. ✅ Apply Fix 2 + Fix 3 to `openbsd-first-boot.py`.
-6. ✅ Apply Fix 2 to `solaris-first-boot.py` + replace the inline hdiutil
-   Python in `solaris-test.sh` with a `grep -aoE` one-liner.
-7. ✅ Apply Fix 3 to `dragonfly-first-boot.py` (already had portable Fix 2).
-   OVMF path resolution added: tries macOS Homebrew, Debian/Ubuntu, and
-   Fedora/RHEL locations; exits with `sudo apt-get install ovmf` hint when
-   none found.
-8. ✅ Apply Fix 4 (`tar --no-mac-metadata`) to `linux-i386-test.sh`.
-
-**Bonus, included in Phase 2**: the direct-QEMU scripts (`openbsd-`,
-`dragonfly-first-boot.py`) hardcoded `-accel tcg`. Now they probe
-`/dev/kvm` and use `-cpu host -accel kvm` when available, so the one-time
-bootstrap on Linux benefits from KVM (otherwise OpenBSD/DragonFly first-boot
-would still be TCG-slow even on a Linux KVM host).
-
-Untested on real Linux hardware yet — exercised per the Phase 3 checklist
-below.
-
-### Phase 3: validate on Linux — ✅ DONE
-
-All V1-V12 PASSED on heritage; see archive for individual rows.
-
-**Cleanup after all V* pass:**
-
-- Delete `LIMA-TEST.md` (Phase 0 scratch doc; no longer needed).
-- Delete `/tmp/freebsd-first-boot-linux.py` on heritage (live patched copy
-  used during Phase 0; the in-repo `freebsd-first-boot.py` now supersedes
-  it).
-- Update the **Boot-time predictions** table below with actuals from V1–V12 (most data already in the archive).
-
-### Phase 4 (optional): image migration from macOS
-
-The Lima qcow2 disks already on the Mac can be reused on Linux to skip the
-download-and-install ceremony for OpenBSD (Vagrant box extraction) and
-DragonFly (manually-installed image — no source for fresh creation):
-
-```sh
-# On the Mac:
-scp ~/.lima/_cache/openbsd7.qcow2 linux:~/.lima/_cache/
-scp ~/.lima/_cache/dragonfly64.qcow2 linux:~/.lima/_cache/
-# Also copy any per-VM disks if you want to skip first-boot:
-scp -r ~/.lima/openbsd-ipc linux:~/.lima/
-# The Lima SSH key is per-machine, so the VM's authorized_keys
-# won't accept the Linux key unless you also copy ~/.lima/_config/.
-# Easier: let first-boot re-run on Linux and inject the local key.
-```
-
-Not blocking; nice for skipping ~20 minutes of one-time downloads.
-
 ## What we are explicitly NOT doing
 
 These appeared in LINUX-VMS.md; the validation showed they aren't needed:
@@ -164,19 +80,6 @@ These appeared in LINUX-VMS.md; the validation showed they aren't needed:
   on the host. That breaks dual support (macOS still needs the VM). If we
   want this speedup later, it's a separate optimization, not part of the
   Linux port.
-
-## Boot-time predictions (verify during Phase 3)
-
-These are predictions, not measurements. Replace with actuals once V1–V9
-have been run.
-
-| VM | macOS now (TCG) | Linux KVM expected | Notes |
-|---|---|---|---|
-| FreeBSD | ~7s (HVF aarch64) | 17s measured (x86_64) | Already validated (Phase 0) |
-| OpenBSD | ~33s | ~10-15s | First TCG escape |
-| Solaris | ~58s | ~15-20s | Slowest TCG VM currently |
-| DragonFly | ~42s | ~12-15s | EDK2 OVMF path differs on Linux |
-| linux-i386 chroot | ~29s | similar | Same nested chroot; no KVM benefit |
 
 ## Backlog
 
@@ -329,3 +232,32 @@ machine" section when B7 lands.
   guest filesystem inspection. May need re-applying after kernel
   package upgrades.
 
+### B9: Image migration from macOS (optional speedup)
+
+(Was "Phase 4" in earlier plan drafts; promoted to a backlog item
+since it isn't blocking anything.) The Lima qcow2 disks already on a
+Mac can be reused on Linux to skip the download-and-install ceremony
+for OpenBSD (Vagrant box extraction) and DragonFly (manually-installed
+image — no public source for fresh creation):
+
+```sh
+# On the Mac:
+scp ~/.lima/_cache/openbsd7.qcow2 linux:~/.lima/_cache/
+scp ~/.lima/_cache/dragonfly64.qcow2 linux:~/.lima/_cache/
+# Also copy any per-VM disks if you want to skip first-boot:
+scp -r ~/.lima/openbsd-ipc linux:~/.lima/
+# The Lima SSH key is per-machine, so the VM's authorized_keys
+# won't accept the Linux key unless you also copy ~/.lima/_config/.
+# Easier: let first-boot re-run on Linux and inject the local key.
+```
+
+Not blocking; nice for skipping ~20 minutes of one-time downloads on
+a fresh Linux host. Worth folding into B7's Migration doc.
+
+### Loose ends from Phase 3
+
+- Delete `LIMA-TEST.md` (Phase 0 scratch doc; no longer needed). May
+  or may not exist in your tree.
+- Delete `/tmp/freebsd-first-boot-linux.py` on heritage (live patched
+  copy used during Phase 0; the in-repo `freebsd-first-boot.py` now
+  supersedes it).

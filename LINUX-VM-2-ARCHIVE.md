@@ -4,6 +4,83 @@ This file holds work items from [LINUX-VMS-2.md](LINUX-VMS-2.md) that have
 been completed and verified. Stable IDs (V1, V2, …; Fix 1, Fix 2, …) are
 preserved here.
 
+## Completed project phases
+
+(Moved out of `LINUX-VMS-2.md` on 2026-05-29 once all phases were ✅.
+The phase headers were a checklist; the actual fixes they reference are
+catalogued under "Completed fixes" / "Archived fixes" below.)
+
+### Phase 0: Lima-on-Linux validation — ✅ DONE
+
+Run on a real Ubuntu 22.04 x86_64 box with Lima 2.1.1:
+
+| Check | Result |
+|---|---|
+| Lima installable from upstream tarball | ✅ |
+| `/dev/kvm` accessible (user in `kvm` group) | ✅ |
+| `-machine q35,accel=kvm` appears in qemu cmdline | ✅ KVM confirmed |
+| Guest reports `Hypervisor: KVMKVMKVM` (FreeBSD `sysctl hw.hv_vendor`) | ✅ |
+| FreeBSD 14.3 x86_64 cold start (download + create + first boot) | ~1m49s |
+| FreeBSD 14.3 x86_64 warm start | **17s** |
+| `limactl shell freebsd-test -- uname -a` works post-first-boot | ✅ |
+| FreeBSD flua YAML cloud-init bug | ⚠️ Present on Linux too (→ B2) |
+| Lima 2.1.1 `--norock` issue with Debian `genisoimage` | ⚠️ Needs `xorriso` (→ Fix 1) |
+
+The 17s warm boot is comparable to FreeBSD aarch64 on macOS HVF — both
+native virt. The big wins were ahead on OpenBSD/DragonFly/Solaris
+(historically 30-60s under TCG on macOS).
+
+### Phase 1: portability fixes — minimum viable Linux support ✅ DONE
+
+Smallest set of changes to make the FreeBSD CI work on a Linux box without
+manual intervention:
+
+1. ✅ Edit `freebsd-lima.yaml` per Fix 5 (multi-arch images).
+2. ✅ Apply Fix 2 (`hdiutil` → `grep`) to `freebsd-first-boot.py`.
+3. ✅ Add Fix 1 setup note to `ci/README.md`.
+4. ✅ Add `xorriso` probe to `vm-tests.sh` (Linux-only; exits early with the
+   install command if `xorrisofs` is missing).
+
+After Phase 1: a Linux box could run `freebsd-test.sh` end-to-end. Verified
+on heritage.hellbent.app (Ubuntu 22.04, Lima 2.1.1).
+
+### Phase 2: port the other first-boot scripts ✅ DONE
+
+5. ✅ Apply Fix 2 + Fix 3 to `openbsd-first-boot.py`.
+6. ✅ Apply Fix 2 to `solaris-first-boot.py` + replace the inline hdiutil
+   Python in `solaris-test.sh` with a `grep -aoE` one-liner.
+7. ✅ Apply Fix 3 to `dragonfly-first-boot.py` (already had portable Fix 2).
+   OVMF path resolution added: tries macOS Homebrew, Debian/Ubuntu, and
+   Fedora/RHEL locations; exits with `sudo apt-get install ovmf` hint when
+   none found.
+8. ✅ Apply Fix 4 (`tar --no-mac-metadata`) to `linux-i386-test.sh`.
+
+**Bonus, included in Phase 2**: the direct-QEMU scripts (`openbsd-`,
+`dragonfly-first-boot.py`) had hardcoded `-accel tcg`. They now probe
+`/dev/kvm` and use `-cpu host -accel kvm` when available, so the one-time
+bootstrap on Linux benefits from KVM (otherwise OpenBSD/DragonFly first-boot
+would still be TCG-slow even on a Linux KVM host).
+
+### Phase 3: validate on Linux — ✅ DONE
+
+All V1-V12 PASSED on heritage. Per-VM results are in the "Completed
+validations" table below.
+
+## Boot-time predictions vs. actuals
+
+The original plan included a predictions table to verify during Phase 3.
+With Phase 3 done, the actuals (embedded in each V row in the validations
+table) are the authoritative numbers. Original predictions table preserved
+for reference:
+
+| VM | macOS now (TCG, predicted) | Linux KVM (predicted) | Notes |
+|---|---|---|---|
+| FreeBSD | ~7s (HVF aarch64) | 17s measured (x86_64) | Validated in Phase 0 |
+| OpenBSD | ~33s | ~10-15s | First TCG escape |
+| Solaris | ~58s | ~15-20s | Slowest TCG VM at the time |
+| DragonFly | ~42s | ~12-15s | EDK2 OVMF path differs on Linux |
+| linux-i386 chroot | ~29s | similar | Same nested chroot; no KVM benefit |
+
 ## Completed fixes
 
 ### Fix 1: `xorriso` dependency on Linux
