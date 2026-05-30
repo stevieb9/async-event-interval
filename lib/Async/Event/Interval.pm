@@ -1242,7 +1242,7 @@ Send in an interval of zero (C<0>) to have your event run a single time. Call
 L<start()|/start(@params)> (or C<restart()>) repeatedly for numerous
 individual/one-off runs.
 
-    use Async::Event::Interval
+    use Async::Event::Interval;
 
     my $event = Async::Event::Interval->new(0, sub {print "hey\n";});
 
@@ -1260,7 +1260,7 @@ individual/one-off runs.
 Change the delay interval from 5 to 600 seconds after the event has fired 100
 times
 
-    use Async::Event::Interval
+    use Async::Event::Interval;
 
     my $event = Async::Event::Interval->new(5, sub {print "hey\n";});
 
@@ -1309,7 +1309,7 @@ the C<new()> method.
 
 For example:
 
-    use Async::Event::Interval
+    use Async::Event::Interval;
 
     my @params = (
         { a => 1 },
@@ -1343,7 +1343,7 @@ Changing these within the main program will have no effect on the values sent
 into the event itself. These parameter variables are copies and are not shared.
 For shared variables, see L</shared_scalar>.
 
-    use Async::Event::Interval
+    use Async::Event::Interval;
 
     my @params = qw(1 2 3);
 
@@ -1430,7 +1430,7 @@ If an event crashes, print out error information and restart the event. If an
 event crashes five or more times, print the most recent error message and halt
 the program so you can figure out what's wrong with your callback code.
 
-    use Async::Event::Interval
+    use Async::Event::Interval;
 
     my $event = Async::Event::Interval->new(5, sub {print "hey\n";});
 
@@ -1450,7 +1450,7 @@ the program so you can figure out what's wrong with your callback code.
                 "Runs: %d, Runs errored: %d, Last error message: %s\n",
                 $event->runs,
                 $event->errors,
-                $event->error_message;
+                $event->error_message
             );
 
             $event->restart;
@@ -1522,7 +1522,7 @@ be set at any time; it will be picked up on each iteration of your callback.
     $event->start;
 
     while (1) {
-        if ($event->error =~ /Callback timed out/) {
+        if ($event->error_message =~ /Callback timed out/) {
             print "Event callback timed out... exiting to troubleshoot\n";
             exit;
         }
